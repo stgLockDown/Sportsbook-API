@@ -1,6 +1,6 @@
 """
-Sportsbook Odds Aggregation API v9 — Maximum Coverage Edition
-Directly scrapes public APIs from 36+ sportsbooks across US, EU, UK, AU, and exchanges.
+Sportsbook Odds Aggregation API v10 — Maximum Coverage Edition
+Directly scrapes public APIs from 47+ sportsbooks across US, EU, UK, AU, Balkans, and exchanges.
 No API keys required. No third-party middlemen.
 
 Sportsbooks (28):
@@ -56,7 +56,7 @@ async def _prefetch_background():
 async def lifespan(app: FastAPI):
     """Start server immediately, pre-fetch in background."""
     import asyncio
-    print("[API] Starting up v9.0.0 — 36 sportsbooks, 24 sports")
+    print("[API] Starting up v10.0.0 — 47 sportsbooks, 24 sports")
     task = asyncio.create_task(_prefetch_background())
     print("[API] Startup complete. Pre-fetching in background...")
     yield
@@ -69,15 +69,17 @@ async def lifespan(app: FastAPI):
 app = FastAPI(
     title="Sportsbook Odds Aggregation API — Maximum Coverage Edition",
     description=(
-        "Real-time odds from 36+ sportsbooks via direct API scraping. "
+        "Real-time odds from 47+ sportsbooks via direct API scraping. "
         "Sources: Bovada, FanDuel, BetRivers, Pinnacle, Pinnacle v3, Kambi/Unibet, "
         "Unibet (Detail), PAF (Detail), ESPN/DraftKings, Smarkets, Matchbook, "
-        "PAF, Svenska Spel, ATG, Unibet UK/SE/NL, Ladbrokes AU, Neds AU, "
+        "PAF, Svenska Spel, ATG, Unibet UK/SE/NL/BE/RO/DE/DK/CA, Ladbrokes AU, Neds AU, "
         "Underdog Fantasy, DraftKings, BetMGM, bet365, Caesars, 22Bet, PointsBet, "
         "Coolbet, ComeOn, Leon.bet, Pinnacle (Guest), "
+        "MaxBet, SoccerBet RS, Merkur RS, BetOle RS, "
+        "888sport IT, Bingoal, BetCity NL, "
         "Consensus, Opening Lines. 24 sports. No API keys required."
     ),
-    version="9.0.0",
+    version="10.0.0",
     lifespan=lifespan,
 )
 
@@ -96,7 +98,7 @@ app.add_middleware(
 async def root():
     return {
         "name": "Sportsbook Odds Aggregation API — Ultimate Edition",
-        "version": "9.0.0",
+        "version": "10.0.0",
         "sportsbooks": ALL_SPORTSBOOKS,
         "sportsbook_count": len(ALL_SPORTSBOOKS),
         "sport_count": len(get_available_sports()),
@@ -380,7 +382,7 @@ async def clear_cache():
 async def health():
     return {
         "status": "healthy",
-        "version": "9.0.0",
+        "version": "10.0.0",
         "sportsbooks": ALL_SPORTSBOOKS,
         "sportsbook_count": len(ALL_SPORTSBOOKS),
         "sport_count": len(get_available_sports()),

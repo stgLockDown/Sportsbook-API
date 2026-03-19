@@ -1,6 +1,6 @@
-# 🏈 Sportsbook Odds Aggregation API v9.0.0
+# 🏈 Sportsbook Odds Aggregation API v10.0.0
 
-Real-time sports betting odds aggregated from **36+ sportsbooks** via direct API scraping. No API keys required. No third-party middlemen.
+Real-time sports betting odds aggregated from **47+ sportsbooks** via direct API scraping. No API keys required. No third-party middlemen.
 
 [![Deploy on Railway](https://railway.app/button.svg)](https://railway.app/template/sportsbook-api)
 
@@ -8,7 +8,7 @@ Real-time sports betting odds aggregated from **36+ sportsbooks** via direct API
 
 ## 🚀 Features
 
-- **36+ Sportsbooks** scraped in real-time
+- **47+ Sportsbooks** scraped in real-time
 - **24 Sports** covered (NBA, NFL, MLB, NHL, Soccer, Tennis, MMA, and more)
 - **Cross-book comparison** — find the best odds instantly
 - **Live odds** support for in-play betting
@@ -26,7 +26,8 @@ Real-time sports betting odds aggregated from **36+ sportsbooks** via direct API
 | **US via Action Network** | DraftKings, FanDuel, BetRivers, BetMGM, Bet365, Caesars |
 | **Offshore** | Bovada |
 | **Sharp** | Pinnacle, Pinnacle v3 (Arcadia), Pinnacle (Guest) |
-| **EU/International** | Kambi/Unibet, Unibet (Detail), PAF (Detail), Svenska Spel, ATG, Unibet UK/SE/NL, 22Bet, Coolbet, ComeOn, Leon.bet |
+| **EU/International** | Kambi/Unibet, Unibet (Detail), PAF (Detail), Svenska Spel, ATG, Unibet UK/SE/NL/BE/RO/DE/DK/CA, 22Bet, Coolbet, ComeOn, Leon.bet, 888sport IT, Bingoal, BetCity NL |
+| **Balkans** | MaxBet, SoccerBet RS, Merkur RS, BetOle RS |
 | **Australia** | Ladbrokes AU, Neds AU, PointsBet |
 | **Exchanges** | Smarkets, Matchbook |
 | **DFS** | Underdog Fantasy |
@@ -333,7 +334,20 @@ This project is for educational and personal use only. Ensure compliance with th
 
 ## 🔄 Changelog
 
-### v9.0.0 (Current)
+### v10.0.0 (Current)
+- **Massive expansion: +13 sportsbooks in one release**
+- Added MaxBet (Serbia) — 900+ soccer, 70+ basketball, 90+ tennis with ML/spread/total
+- Added SoccerBet RS — 858+ soccer, 12 sports, 2.3MB data via Balkan API
+- Added Merkur RS — 900+ soccer, 12 sports, full odds via Balkan API
+- Added BetOle RS — 1.3MB soccer data via Balkan API
+- Added 5 new Unibet regional operators (BE, RO, DE, DK, CA) via Kambi CDN
+- Added 888sport IT via Kambi CDN — 311KB+ soccer data
+- Added Bingoal (Belgium) via Kambi CDN — 766KB+ soccer data
+- Added BetCity NL via Kambi CDN — 2.2MB+ soccer data (809 events!)
+- Created kambi_factory and balkan_factory for scalable multi-operator support
+- Total: 47 sportsbooks, 24 sports, 11,500+ soccer events
+
+### v9.0.0
 - Added ComeOn (Kambi CDN) scraper — 141+ soccer events, 66+ esports events with full ML/spread/total
 - Confirmed working across 17 sports via Kambi CDN integration
 - Total: 36 sportsbooks, 24 sports
