@@ -1,0 +1,43 @@
+# Git
+.git
+.gitignore
+
+# Python
+__pycache__
+*.py[cod]
+*$py.class
+*.egg-info
+dist
+build
+
+# Virtual environments
+.venv
+venv
+
+# IDE
+.vscode
+.idea
+
+# Environment
+.env
+.env.local
+.env.production
+
+# Test / Research files
+test_*.py
+quick_test*.py
+research_*.py
+*_response.json
+
+# Documentation
+*.md
+!README.md
+todo.md
+LICENSE
+
+# Deployment configs (not needed inside container)
+railway.toml
+railway.json
+nixpacks.toml
+Procfile
+.dockerignore

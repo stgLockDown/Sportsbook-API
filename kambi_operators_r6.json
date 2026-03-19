@@ -1,0 +1,261 @@
+{
+  "unibet_new_jersey": {
+    "operator": "unibet_new_jersey",
+    "url": "https://eu-offering-api.kambicdn.com/offering/v2018/unibet_new_jersey/listView/all/all/all/all/events",
+    "status_code": 429,
+    "content_length": 9,
+    "error": "HTTP 429"
+  },
+  "unibet_australia": {
+    "operator": "unibet_australia",
+    "url": "https://eu-offering-api.kambicdn.com/offering/v2018/unibet_australia/listView/all/all/all/all/events",
+    "status_code": 429,
+    "content_length": 9,
+    "error": "HTTP 429"
+  },
+  "unibet_pennsylvania": {
+    "operator": "unibet_pennsylvania",
+    "url": "https://eu-offering-api.kambicdn.com/offering/v2018/unibet_pennsylvania/listView/all/all/all/all/events",
+    "status_code": 429,
+    "content_length": 9,
+    "error": "HTTP 429"
+  },
+  "unibet_belgium": {
+    "operator": "unibet_belgium",
+    "url": "https://eu-offering-api.kambicdn.com/offering/v2018/unibet_belgium/listView/all/all/all/all/events",
+    "status_code": 429,
+    "content_length": 9,
+    "error": "HTTP 429"
+  },
+  "unibet_estonia": {
+    "operator": "unibet_estonia",
+    "url": "https://eu-offering-api.kambicdn.com/offering/v2018/unibet_estonia/listView/all/all/all/all/events",
+    "status_code": 429,
+    "content_length": 9,
+    "error": "HTTP 429"
+  },
+  "unibet_italy": {
+    "operator": "unibet_italy",
+    "url": "https://eu-offering-api.kambicdn.com/offering/v2018/unibet_italy/listView/all/all/all/all/events",
+    "status_code": 429,
+    "content_length": 9,
+    "error": "HTTP 429"
+  },
+  "unibet_romania": {
+    "operator": "unibet_romania",
+    "url": "https://eu-offering-api.kambicdn.com/offering/v2018/unibet_romania/listView/all/all/all/all/events",
+    "status_code": 429,
+    "content_length": 9,
+    "error": "HTTP 429"
+  },
+  "unibet_canada": {
+    "operator": "unibet_canada",
+    "url": "https://eu-offering-api.kambicdn.com/offering/v2018/unibet_canada/listView/all/all/all/all/events",
+    "status_code": 429,
+    "content_length": 9,
+    "error": "HTTP 429"
+  },
+  "unibet_latvia": {
+    "operator": "unibet_latvia",
+    "url": "https://eu-offering-api.kambicdn.com/offering/v2018/unibet_latvia/listView/all/all/all/all/events",
+    "status_code": 429,
+    "content_length": 9,
+    "error": "HTTP 429"
+  },
+  "unibet_greece": {
+    "operator": "unibet_greece",
+    "url": "https://eu-offering-api.kambicdn.com/offering/v2018/unibet_greece/listView/all/all/all/all/events",
+    "status_code": 429,
+    "content_length": 9,
+    "error": "HTTP 429"
+  },
+  "unibet_poland": {
+    "operator": "unibet_poland",
+    "url": "https://eu-offering-api.kambicdn.com/offering/v2018/unibet_poland/listView/all/all/all/all/events",
+    "status_code": 429,
+    "content_length": 9,
+    "error": "HTTP 429"
+  },
+  "unibet_germany": {
+    "operator": "unibet_germany",
+    "url": "https://eu-offering-api.kambicdn.com/offering/v2018/unibet_germany/listView/all/all/all/all/events",
+    "status_code": 429,
+    "content_length": 9,
+    "error": "HTTP 429"
+  },
+  "unibet_denmark": {
+    "operator": "unibet_denmark",
+    "url": "https://eu-offering-api.kambicdn.com/offering/v2018/unibet_denmark/listView/all/all/all/all/events",
+    "status_code": 429,
+    "content_length": 9,
+    "error": "HTTP 429"
+  },
+  "unibet_ireland": {
+    "operator": "unibet_ireland",
+    "url": "https://eu-offering-api.kambicdn.com/offering/v2018/unibet_ireland/listView/all/all/all/all/events",
+    "status_code": 429,
+    "content_length": 9,
+    "error": "HTTP 429"
+  },
+  "unibet_uk": {
+    "operator": "unibet_uk",
+    "url": "https://eu-offering-api.kambicdn.com/offering/v2018/unibet_uk/listView/all/all/all/all/events",
+    "status_code": 429,
+    "content_length": 9,
+    "error": "HTTP 429"
+  },
+  "stanleybet_romania": {
+    "operator": "stanleybet_romania",
+    "url": "https://eu-offering-api.kambicdn.com/offering/v2018/stanleybet_romania/listView/all/all/all/all/events",
+    "status_code": 429,
+    "content_length": 9,
+    "error": "HTTP 429"
+  },
+  "888_sport": {
+    "operator": "888_sport",
+    "url": "https://eu-offering-api.kambicdn.com/offering/v2018/888_sport/listView/all/all/all/all/events",
+    "status_code": 400,
+    "content_length": 57,
+    "error": "HTTP 400"
+  },
+  "32red": {
+    "operator": "32red",
+    "url": "https://eu-offering-api.kambicdn.com/offering/v2018/32red/listView/all/all/all/all/events",
+    "status_code": 400,
+    "content_length": 57,
+    "error": "HTTP 400"
+  },
+  "betwarrior": {
+    "operator": "betwarrior",
+    "url": "https://eu-offering-api.kambicdn.com/offering/v2018/betwarrior/listView/all/all/all/all/events",
+    "status_code": 429,
+    "content_length": 9,
+    "error": "HTTP 429"
+  },
+  "unibet_sweden": {
+    "operator": "unibet_sweden",
+    "url": "https://eu-offering-api.kambicdn.com/offering/v2018/unibet_sweden/listView/all/all/all/all/events",
+    "status_code": 429,
+    "content_length": 9,
+    "error": "HTTP 429"
+  },
+  "grosvenor": {
+    "operator": "grosvenor",
+    "url": "https://eu-offering-api.kambicdn.com/offering/v2018/grosvenor/listView/all/all/all/all/events",
+    "status_code": 400,
+    "content_length": 57,
+    "error": "HTTP 400"
+  },
+  "mybet": {
+    "operator": "mybet",
+    "url": "https://eu-offering-api.kambicdn.com/offering/v2018/mybet/listView/all/all/all/all/events",
+    "status_code": 429,
+    "content_length": 9,
+    "error": "HTTP 429"
+  },
+  "napoleon_games": {
+    "operator": "napoleon_games",
+    "url": "https://eu-offering-api.kambicdn.com/offering/v2018/napoleon_games/listView/all/all/all/all/events",
+    "status_code": 429,
+    "content_length": 9,
+    "error": "HTTP 429"
+  },
+  "betuk": {
+    "operator": "betuk",
+    "url": "https://eu-offering-api.kambicdn.com/offering/v2018/betuk/listView/all/all/all/all/events",
+    "status_code": 400,
+    "content_length": 57,
+    "error": "HTTP 400"
+  },
+  "storspelare": {
+    "operator": "storspelare",
+    "url": "https://eu-offering-api.kambicdn.com/offering/v2018/storspelare/listView/all/all/all/all/events",
+    "status_code": 429,
+    "content_length": 9,
+    "error": "HTTP 429"
+  },
+  "betplay": {
+    "operator": "betplay",
+    "url": "https://eu-offering-api.kambicdn.com/offering/v2018/betplay/listView/all/all/all/all/events",
+    "status_code": 429,
+    "content_length": 9,
+    "error": "HTTP 429"
+  },
+  "redbet": {
+    "operator": "redbet",
+    "url": "https://eu-offering-api.kambicdn.com/offering/v2018/redbet/listView/all/all/all/all/events",
+    "status_code": 429,
+    "content_length": 9,
+    "error": "HTTP 429"
+  },
+  "leovegas": {
+    "operator": "leovegas",
+    "url": "https://eu-offering-api.kambicdn.com/offering/v2018/leovegas/listView/all/all/all/all/events",
+    "status_code": 400,
+    "content_length": 57,
+    "error": "HTTP 400"
+  },
+  "casumo": {
+    "operator": "casumo",
+    "url": "https://eu-offering-api.kambicdn.com/offering/v2018/casumo/listView/all/all/all/all/events",
+    "status_code": 400,
+    "content_length": 57,
+    "error": "HTTP 400"
+  },
+  "happybet": {
+    "operator": "happybet",
+    "url": "https://eu-offering-api.kambicdn.com/offering/v2018/happybet/listView/all/all/all/all/events",
+    "status_code": 400,
+    "content_length": 57,
+    "error": "HTTP 400"
+  },
+  "betsafe": {
+    "operator": "betsafe",
+    "url": "https://eu-offering-api.kambicdn.com/offering/v2018/betsafe/listView/all/all/all/all/events",
+    "status_code": 429,
+    "content_length": 9,
+    "error": "HTTP 429"
+  },
+  "parx_casino": {
+    "operator": "parx_casino",
+    "url": "https://eu-offering-api.kambicdn.com/offering/v2018/parx_casino/listView/all/all/all/all/events",
+    "status_code": 429,
+    "content_length": 9,
+    "error": "HTTP 429"
+  },
+  "rio_all_suite_hotel_casino": {
+    "operator": "rio_all_suite_hotel_casino",
+    "url": "https://eu-offering-api.kambicdn.com/offering/v2018/rio_all_suite_hotel_casino/listView/all/all/all/all/events",
+    "status_code": 429,
+    "content_length": 9,
+    "error": "HTTP 429"
+  },
+  "jokerbet": {
+    "operator": "jokerbet",
+    "url": "https://eu-offering-api.kambicdn.com/offering/v2018/jokerbet/listView/all/all/all/all/events",
+    "status_code": 429,
+    "content_length": 9,
+    "error": "HTTP 429"
+  },
+  "nordicbet": {
+    "operator": "nordicbet",
+    "url": "https://eu-offering-api.kambicdn.com/offering/v2018/nordicbet/listView/all/all/all/all/events",
+    "status_code": 429,
+    "content_length": 9,
+    "error": "HTTP 429"
+  },
+  "kindred": {
+    "operator": "kindred",
+    "url": "https://eu-offering-api.kambicdn.com/offering/v2018/kindred/listView/all/all/all/all/events",
+    "status_code": 429,
+    "content_length": 9,
+    "error": "HTTP 429"
+  },
+  "betsson": {
+    "operator": "betsson",
+    "url": "https://eu-offering-api.kambicdn.com/offering/v2018/betsson/listView/all/all/all/all/events",
+    "status_code": 429,
+    "content_length": 9,
+    "error": "HTTP 429"
+  }
+}

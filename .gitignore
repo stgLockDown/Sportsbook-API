@@ -1,0 +1,48 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+*.egg-info/
+dist/
+build/
+eggs/
+*.egg
+.eggs/
+
+# Virtual environments
+.venv/
+venv/
+ENV/
+env/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Environment
+.env
+.env.local
+.env.production
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+
+# Test / Research files
+test_*.py
+quick_test*.py
+research_*.py
+research_*.txt
+research_*.json
+*_response.json
+add_comeon_slugs.py
+
+# Documentation (kept separately)
+todo.md
