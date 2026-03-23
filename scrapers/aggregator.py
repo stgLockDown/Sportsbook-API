@@ -93,6 +93,8 @@ SPORT_SLUGS = {
         "pinnacle_v3": "basketball_nba", "unibet_detail": "basketball_nba", "paf_detail": "basketball_nba",
         "coolbet": "basketball_nba", "comeon": "basketball_nba", "leon": "basketball_nba", "pinnacle_guest": "basketball_nba",
         "maxbet": "basketball_nba",
+        "maxbet_ba": "basketball_nba",
+        "maxbet_mk": "basketball_nba",
         "balkan_factory": "basketball_nba",
         "kambi_factory": "basketball_nba",
     },
@@ -108,6 +110,8 @@ SPORT_SLUGS = {
         "pinnacle_v3": "football_nfl", "unibet_detail": "football_nfl", "paf_detail": "football_nfl",
         "coolbet": "football_nfl", "comeon": "football_nfl", "leon": "football_nfl", "pinnacle_guest": "football_nfl",
         "maxbet": "football_nfl",
+        "maxbet_ba": "football_nfl",
+        "maxbet_mk": "football_nfl",
         "balkan_factory": "football_nfl",
         "kambi_factory": "football_nfl",
     },
@@ -123,6 +127,8 @@ SPORT_SLUGS = {
         "pinnacle_v3": "baseball_mlb", "unibet_detail": "baseball_mlb", "paf_detail": "baseball_mlb",
         "coolbet": "baseball_mlb", "comeon": "baseball_mlb", "leon": "baseball_mlb", "pinnacle_guest": "baseball_mlb",
         "maxbet": "baseball_mlb",
+        "maxbet_ba": "baseball_mlb",
+        "maxbet_mk": "baseball_mlb",
         "balkan_factory": "baseball_mlb",
         "kambi_factory": "baseball_mlb",
     },
@@ -138,6 +144,8 @@ SPORT_SLUGS = {
         "pinnacle_v3": "ice_hockey_nhl", "unibet_detail": "ice_hockey_nhl", "paf_detail": "ice_hockey_nhl",
         "coolbet": "ice_hockey_nhl", "comeon": "ice_hockey_nhl", "leon": "ice_hockey_nhl", "pinnacle_guest": "ice_hockey_nhl",
         "maxbet": "ice_hockey_nhl",
+        "maxbet_ba": "ice_hockey_nhl",
+        "maxbet_mk": "ice_hockey_nhl",
         "balkan_factory": "ice_hockey_nhl",
         "kambi_factory": "ice_hockey_nhl",
     },
@@ -150,6 +158,8 @@ SPORT_SLUGS = {
         "actionnetwork": "american_football_ncaaf",
         "coolbet": "football_ncaaf", "comeon": "football_ncaaf", "leon": "football_ncaaf", "pinnacle_guest": "football_ncaaf",
         "maxbet": "football_ncaaf",
+        "maxbet_ba": "football_ncaaf",
+        "maxbet_mk": "football_ncaaf",
         "balkan_factory": "football_ncaaf",
         "kambi_factory": "football_ncaaf",
     },
@@ -164,6 +174,8 @@ SPORT_SLUGS = {
         "pinnacle_v3": "basketball_ncaab", "unibet_detail": "basketball_ncaab", "paf_detail": "basketball_ncaab",
         "coolbet": "basketball_ncaab", "comeon": "basketball_ncaab", "leon": "basketball_ncaab", "pinnacle_guest": "basketball_ncaab",
         "maxbet": "basketball_ncaab",
+        "maxbet_ba": "basketball_ncaab",
+        "maxbet_mk": "basketball_ncaab",
         "balkan_factory": "basketball_ncaab",
         "kambi_factory": "basketball_ncaab",
     },
@@ -179,6 +191,8 @@ SPORT_SLUGS = {
         "pinnacle_v3": "soccer_epl", "unibet_detail": "soccer_epl", "paf_detail": "soccer_epl",
         "coolbet": "soccer", "comeon": "soccer", "leon": "soccer", "pinnacle_guest": "soccer",
         "maxbet": "soccer",
+        "maxbet_ba": "soccer",
+        "maxbet_mk": "soccer",
         "balkan_factory": "soccer",
         "kambi_factory": "soccer",
     },
@@ -193,6 +207,8 @@ SPORT_SLUGS = {
         "pinnacle_v3": "mma_ufc",
         "coolbet": "mma", "comeon": "mma", "leon": "mma_ufc", "pinnacle_guest": "mma_ufc",
         "maxbet": "mma",
+        "maxbet_ba": "mma",
+        "maxbet_mk": "mma",
         "balkan_factory": "mma",
         "kambi_factory": "mma",
     },
@@ -204,6 +220,8 @@ SPORT_SLUGS = {
         "draftkings": "boxing",
         "coolbet": "boxing", "comeon": "boxing", "leon": "boxing", "pinnacle_guest": "boxing",
         "maxbet": "boxing",
+        "maxbet_ba": "boxing",
+        "maxbet_mk": "boxing",
         "balkan_factory": "boxing",
         "kambi_factory": "boxing",
     },
@@ -218,6 +236,8 @@ SPORT_SLUGS = {
         "pinnacle_v3": "tennis", "unibet_detail": "tennis", "paf_detail": "tennis",
         "coolbet": "tennis", "comeon": "tennis", "leon": "tennis", "pinnacle_guest": "tennis",
         "maxbet": "tennis",
+        "maxbet_ba": "tennis",
+        "maxbet_mk": "tennis",
         "balkan_factory": "tennis",
         "kambi_factory": "tennis",
     },
@@ -229,6 +249,8 @@ SPORT_SLUGS = {
         "underdog": "golf", "draftkings": "golf",
         "coolbet": "golf", "comeon": "golf", "leon": "golf", "pinnacle_guest": "golf",
         "maxbet": "golf",
+        "maxbet_ba": "golf",
+        "maxbet_mk": "golf",
         "balkan_factory": "golf",
         "kambi_factory": "golf",
     },
@@ -238,6 +260,8 @@ SPORT_SLUGS = {
         "ladbrokes_au": "cricket", "neds_au": "cricket", "kambi_multi": "cricket",
         "coolbet": "cricket", "comeon": "cricket", "leon": "cricket", "pinnacle_guest": "cricket",
         "maxbet": "cricket",
+        "maxbet_ba": "cricket",
+        "maxbet_mk": "cricket",
         "balkan_factory": "cricket",
         "kambi_factory": "cricket",
     },
@@ -247,6 +271,8 @@ SPORT_SLUGS = {
         "ladbrokes_au": "rugby_union", "neds_au": "rugby_union", "kambi_multi": "rugby_union",
         "coolbet": "rugby_union", "comeon": "rugby_union", "leon": "rugby_union", "pinnacle_guest": "rugby_union",
         "maxbet": "rugby_union",
+        "maxbet_ba": "rugby_union",
+        "maxbet_mk": "rugby_union",
         "balkan_factory": "rugby_union",
         "kambi_factory": "rugby_union",
     },
@@ -256,6 +282,8 @@ SPORT_SLUGS = {
         "ladbrokes_au": "darts", "neds_au": "darts", "kambi_multi": "darts",
         "coolbet": "darts", "comeon": "darts", "leon": "darts", "pinnacle_guest": "darts",
         "maxbet": "darts",
+        "maxbet_ba": "darts",
+        "maxbet_mk": "darts",
         "balkan_factory": "darts",
         "kambi_factory": "darts",
     },
@@ -265,6 +293,8 @@ SPORT_SLUGS = {
         "ladbrokes_au": "table_tennis", "neds_au": "table_tennis", "kambi_multi": "table_tennis",
         "coolbet": "table_tennis", "comeon": "table_tennis", "leon": "table_tennis", "pinnacle_guest": "table_tennis",
         "maxbet": "table_tennis",
+        "maxbet_ba": "table_tennis",
+        "maxbet_mk": "table_tennis",
         "balkan_factory": "table_tennis",
         "kambi_factory": "table_tennis",
     },
@@ -274,6 +304,8 @@ SPORT_SLUGS = {
         "ladbrokes_au": "volleyball", "neds_au": "volleyball", "kambi_multi": "volleyball",
         "coolbet": "volleyball", "comeon": "volleyball", "leon": "volleyball", "pinnacle_guest": "volleyball",
         "maxbet": "volleyball",
+        "maxbet_ba": "volleyball",
+        "maxbet_mk": "volleyball",
         "balkan_factory": "volleyball",
         "kambi_factory": "volleyball",
     },
@@ -283,6 +315,8 @@ SPORT_SLUGS = {
         "ladbrokes_au": "handball", "neds_au": "handball", "kambi_multi": "handball",
         "coolbet": "handball", "comeon": "handball", "leon": "handball", "pinnacle_guest": "handball",
         "maxbet": "handball",
+        "maxbet_ba": "handball",
+        "maxbet_mk": "handball",
         "balkan_factory": "handball",
         "kambi_factory": "handball",
     },
@@ -291,6 +325,8 @@ SPORT_SLUGS = {
         "kambi": "esports", "underdog": "esports",
         "coolbet": "esports", "comeon": "esports", "leon": "esports", "pinnacle_guest": "esports",
         "maxbet": "esports",
+        "maxbet_ba": "esports",
+        "maxbet_mk": "esports",
         "balkan_factory": "esports",
         "kambi_factory": "esports",
     },
@@ -300,6 +336,8 @@ SPORT_SLUGS = {
         "ladbrokes_au": "rugby_league", "neds_au": "rugby_league", "kambi_multi": "rugby_league",
         "coolbet": "rugby_league", "comeon": "rugby_league", "leon": "rugby_league", "pinnacle_guest": "rugby_league",
         "maxbet": "rugby_league",
+        "maxbet_ba": "rugby_league",
+        "maxbet_mk": "rugby_league",
         "balkan_factory": "rugby_league",
         "kambi_factory": "rugby_league",
     },
@@ -309,6 +347,8 @@ SPORT_SLUGS = {
         "ladbrokes_au": "afl", "neds_au": "afl", "kambi_multi": "afl",
         "coolbet": "aussie_rules", "comeon": "aussie_rules", "leon": "aussie_rules",
         "maxbet": "aussie_rules",
+        "maxbet_ba": "aussie_rules",
+        "maxbet_mk": "aussie_rules",
         "balkan_factory": "aussie_rules",
         "kambi_factory": "aussie_rules",
     },
@@ -322,6 +362,8 @@ SPORT_SLUGS = {
         "kambi": "snooker", "kambi_multi": "snooker",
         "coolbet": "snooker", "comeon": "snooker", "leon": "snooker", "pinnacle_guest": "snooker",
         "maxbet": "snooker",
+        "maxbet_ba": "snooker",
+        "maxbet_mk": "snooker",
         "balkan_factory": "snooker",
         "kambi_factory": "snooker",
     },
@@ -330,6 +372,8 @@ SPORT_SLUGS = {
         "kambi": "cycling", "kambi_multi": "cycling",
         "coolbet": "cycling", "comeon": "cycling", "leon": "cycling", "pinnacle_guest": "cycling",
         "maxbet": "cycling",
+        "maxbet_ba": "cycling",
+        "maxbet_mk": "cycling",
         "balkan_factory": "cycling",
         "kambi_factory": "cycling",
     },
@@ -338,6 +382,8 @@ SPORT_SLUGS = {
         "kambi": "motor_sports", "kambi_multi": "motorsport",
         "coolbet": "motor_sports", "comeon": "motor_sports", "leon": "motor_sports", "pinnacle_guest": "motor_sports",
         "maxbet": "motor_sports",
+        "maxbet_ba": "motor_sports",
+        "maxbet_mk": "motor_sports",
         "balkan_factory": "motor_sports",
         "kambi_factory": "motor_sports",
     },
@@ -370,6 +416,8 @@ ALL_SPORTSBOOKS = [
     "MaxBet", "SoccerBet RS", "Merkur RS", "BetOle RS",
     "Unibet BE", "Unibet RO", "Unibet DE", "Unibet DK", "Unibet CA",
     "888sport IT", "Bingoal", "BetCity NL",
+    # v10.1 additions (2)
+    "MaxBet BA", "MaxBet MK",
 ]
 
 SPORTSBOOK_INFO = [
@@ -430,6 +478,9 @@ SPORTSBOOK_INFO = [
     {"name": "888sport IT", "type": "Kambi Operator", "region": "Italy", "description": "888sport Italy via Kambi CDN — 311KB+ soccer data with full market detail"},
     {"name": "Bingoal", "type": "Kambi Operator", "region": "Belgium", "description": "Bingoal Belgium via Kambi CDN — 766KB+ soccer data with full market detail"},
     {"name": "BetCity NL", "type": "Kambi Operator", "region": "Netherlands", "description": "BetCity Netherlands via Kambi CDN — 2.2MB+ soccer data with full market detail"},
+    # ─── v10.1 Additions ───
+    {"name": "MaxBet BA", "type": "Balkans", "region": "Bosnia", "description": "MaxBet Bosnia — 330 soccer events, 2.56MB data with ML/spread/total"},
+    {"name": "MaxBet MK", "type": "Balkans", "region": "North Macedonia", "description": "MaxBet North Macedonia — 330 soccer events, 2.55MB data with ML/spread/total"},
 ]
 
 
@@ -807,6 +858,14 @@ async def fetch_single_book(sport_key: str, sportsbook: str) -> List[SportsbookS
             sport = slug_info.get("balkan_factory")
             if sport:
                 snapshots = await balkan_factory.fetch_operator_sport("betole", sport)
+        elif sb in ("maxbetba", "maxbet_ba", "maxbet ba"):
+            sport = slug_info.get("maxbet_ba")
+            if sport:
+                snapshots = await balkan_factory.fetch_operator_sport("maxbet_ba", sport)
+        elif sb in ("maxbetmk", "maxbet_mk", "maxbet mk"):
+            sport = slug_info.get("maxbet_mk")
+            if sport:
+                snapshots = await balkan_factory.fetch_operator_sport("maxbet_mk", sport)
         # ── Kambi Factory Operators ──
         elif sb in ("unibetbe", "unibet_be"):
             sport = slug_info.get("kambi_factory")

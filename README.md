@@ -1,6 +1,6 @@
-# 🏈 Sportsbook Odds Aggregation API v10.0.0
+# 🏈 Sportsbook Odds Aggregation API v10.1.0
 
-Real-time sports betting odds aggregated from **47+ sportsbooks** via direct API scraping. No API keys required. No third-party middlemen.
+Real-time sports betting odds aggregated from **49+ sportsbooks** via direct API scraping. No API keys required. No third-party middlemen.
 
 [![Deploy on Railway](https://railway.app/button.svg)](https://railway.app/template/sportsbook-api)
 
@@ -27,7 +27,7 @@ Real-time sports betting odds aggregated from **47+ sportsbooks** via direct API
 | **Offshore** | Bovada |
 | **Sharp** | Pinnacle, Pinnacle v3 (Arcadia), Pinnacle (Guest) |
 | **EU/International** | Kambi/Unibet, Unibet (Detail), PAF (Detail), Svenska Spel, ATG, Unibet UK/SE/NL/BE/RO/DE/DK/CA, 22Bet, Coolbet, ComeOn, Leon.bet, 888sport IT, Bingoal, BetCity NL |
-| **Balkans** | MaxBet, SoccerBet RS, Merkur RS, BetOle RS |
+| **Balkans** | MaxBet, MaxBet BA, MaxBet MK, SoccerBet RS, Merkur RS, BetOle RS |
 | **Australia** | Ladbrokes AU, Neds AU, PointsBet |
 | **Exchanges** | Smarkets, Matchbook |
 | **DFS** | Underdog Fantasy |
@@ -334,7 +334,13 @@ This project is for educational and personal use only. Ensure compliance with th
 
 ## 🔄 Changelog
 
-### v10.0.0 (Current)
+### v10.1.0 (Current)
+- **Added MaxBet BA (Bosnia) — 330 soccer events, 2.56MB data via Balkan API**
+- **Added MaxBet MK (North Macedonia) — 330 soccer events, 2.55MB data via Balkan API**
+- Both books support ML/spread/total markets across 12 sports
+- Total: 49 sportsbooks, 24 sports, 11,900+ soccer events
+
+### v10.0.0
 - **Massive expansion: +13 sportsbooks in one release**
 - Added MaxBet (Serbia) — 900+ soccer, 70+ basketball, 90+ tennis with ML/spread/total
 - Added SoccerBet RS — 858+ soccer, 12 sports, 2.3MB data via Balkan API
