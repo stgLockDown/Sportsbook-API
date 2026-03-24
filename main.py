@@ -1,9 +1,9 @@
 """
-Sportsbook Odds Aggregation API v10.1.0 — Maximum Coverage Edition
-Directly scrapes public APIs from 49+ sportsbooks across US, EU, UK, AU, Balkans, and exchanges.
+Sportsbook Odds Aggregation API v10.2.0 — Maximum Coverage Edition
+Directly scrapes public APIs from 51+ sportsbooks across US, EU, UK, AU, Balkans, and exchanges.
 No API keys required. No third-party middlemen.
 
-Sportsbooks (49):
+Sportsbooks (51):
   US Legal:    FanDuel, BetRivers, ESPN/DraftKings, DraftKings (direct)
   US via AN:   DraftKings, FanDuel, BetRivers, BetMGM, bet365, Caesars
   Offshore:    Bovada

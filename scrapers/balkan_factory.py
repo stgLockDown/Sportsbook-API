@@ -9,9 +9,12 @@ Confirmed working operators:
   - betole.rs (soccer confirmed)
   - maxbet.ba (12 sports) - NEW in v10.1.0
   - maxbet.mk (12 sports) - NEW in v10.1.0
+  - soccerbet.ba (12 sports) - NEW in v10.2.0
+  - betole.ba (12 sports) - NEW in v10.2.0
 
 API format: https://{domain}/restapi/offer/{locale}/sport/{code}/mob?annex=0&desession=true
 Response: {"esMatches": [{id, home, away, odds: {1: home, 2: draw, 3: away, ...}, params: {hd2, overUnder}}]}
+Note: Some use 'betMap' instead of 'odds' (soccerbet variants)
 """
 
 import httpx
@@ -46,6 +49,14 @@ BALKAN_OPERATORS = {
     "maxbet_mk": {
         "name": "MaxBet MK",
         "base_url": "https://www.maxbet.mk/restapi/offer/mk/sport",
+    },
+    "soccerbet_ba": {
+        "name": "SoccerBet BA",
+        "base_url": "https://www.soccerbet.ba/restapi/offer/ba/sport",
+    },
+    "betole_ba": {
+        "name": "BetOle BA",
+        "base_url": "https://www.betole.ba/restapi/offer/ba/sport",
     },
 }
 
