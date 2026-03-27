@@ -1,14 +1,15 @@
 """
-Sportsbook Odds Aggregation API v10.2.0 — Maximum Coverage Edition
-Directly scrapes public APIs from 51+ sportsbooks across US, EU, UK, AU, Balkans, and exchanges.
+Sportsbook Odds Aggregation API v11.0.0 — Global Expansion Edition
+Directly scrapes public APIs from 58+ sportsbooks across US, EU, UK, AU, Balkans, Asia, LatAm, and exchanges.
 No API keys required. No third-party middlemen.
 
-Sportsbooks (51):
+Sportsbooks (58):
   US Legal:    FanDuel, BetRivers, ESPN/DraftKings, DraftKings (direct)
   US via AN:   DraftKings, FanDuel, BetRivers, BetMGM, bet365, Caesars
   Offshore:    Bovada
   Sharp:       Pinnacle
   EU/Intl:     Kambi/Unibet, PAF, Svenska Spel, ATG, Unibet UK, Unibet SE, Unibet NL, 22Bet
+  1xBet Family: 1xBet, BetWinner, Melbet, 1xBit, Linebet, MegaPari, 22Bet (Direct)
   AU:          Ladbrokes AU, Neds AU, PointsBet
   Exchanges:   Smarkets, Matchbook
   DFS:         Underdog Fantasy
@@ -67,9 +68,9 @@ async def lifespan(app: FastAPI):
 # ─── App ──────────────────────────────────────────────────────────────
 
 app = FastAPI(
-    title="Sportsbook Odds Aggregation API — Maximum Coverage Edition",
+    title="Sportsbook Odds Aggregation API — Global Expansion Edition",
     description=(
-        "Real-time odds from 47+ sportsbooks via direct API scraping. "
+        "Real-time odds from 58+ sportsbooks via direct API scraping. "
         "Sources: Bovada, FanDuel, BetRivers, Pinnacle, Pinnacle v3, Kambi/Unibet, "
         "Unibet (Detail), PAF (Detail), ESPN/DraftKings, Smarkets, Matchbook, "
         "PAF, Svenska Spel, ATG, Unibet UK/SE/NL/BE/RO/DE/DK/CA, Ladbrokes AU, Neds AU, "
@@ -77,9 +78,10 @@ app = FastAPI(
         "Coolbet, ComeOn, Leon.bet, Pinnacle (Guest), "
         "MaxBet, SoccerBet RS, Merkur RS, BetOle RS, "
         "888sport IT, Bingoal, BetCity NL, "
+        "1xBet, BetWinner, Melbet, 1xBit, Linebet, MegaPari, 22Bet (Direct), "
         "Consensus, Opening Lines. 24 sports. No API keys required."
     ),
-    version="10.0.0",
+    version="11.0.0",
     lifespan=lifespan,
 )
 

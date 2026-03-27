@@ -34,7 +34,7 @@ from . import actionnetwork, twentytwobet, pointsbet
 from . import pinnacle_v3, unibet, paf
 from . import coolbet, leon, pinnacle_guest
 from . import comeon
-from . import maxbet, kambi_factory, balkan_factory
+from . import maxbet, kambi_factory, balkan_factory, onexbet_factory
 
 
 # ─── Cache ────────────────────────────────────────────────────────────
@@ -101,6 +101,7 @@ SPORT_SLUGS = {
         "betole_ba": "basketball_nba",
         "balkan_factory": "basketball_nba",
         "kambi_factory": "basketball_nba",
+        "onexbet": "basketball",
     },
     "nfl": {
         "sport": "Football", "league": "NFL",
@@ -143,6 +144,7 @@ SPORT_SLUGS = {
         "betole_ba": "baseball_mlb",
         "balkan_factory": "baseball_mlb",
         "kambi_factory": "baseball_mlb",
+        "onexbet": "baseball",
     },
     "nhl": {
         "sport": "Hockey", "league": "NHL",
@@ -164,6 +166,7 @@ SPORT_SLUGS = {
         "betole_ba": "ice_hockey_nhl",
         "balkan_factory": "ice_hockey_nhl",
         "kambi_factory": "ice_hockey_nhl",
+        "onexbet": "ice-hockey",
     },
     "ncaaf": {
         "sport": "Football", "league": "NCAAF",
@@ -202,6 +205,7 @@ SPORT_SLUGS = {
         "betole_ba": "basketball_ncaab",
         "balkan_factory": "basketball_ncaab",
         "kambi_factory": "basketball_ncaab",
+        "onexbet": "basketball",
     },
     "soccer": {
         "sport": "Soccer", "league": "Soccer",
@@ -223,6 +227,7 @@ SPORT_SLUGS = {
         "betole_ba": "soccer",
         "balkan_factory": "soccer",
         "kambi_factory": "soccer",
+        "onexbet": "soccer",
     },
     "mma": {
         "sport": "MMA", "league": "UFC",
@@ -243,6 +248,7 @@ SPORT_SLUGS = {
         "betole_ba": "mma",
         "balkan_factory": "mma",
         "kambi_factory": "mma",
+        "onexbet": "mma",
     },
     "boxing": {
         "sport": "Boxing", "league": "Boxing",
@@ -260,6 +266,7 @@ SPORT_SLUGS = {
         "betole_ba": "boxing",
         "balkan_factory": "boxing",
         "kambi_factory": "boxing",
+        "onexbet": "mma",
     },
     "tennis": {
         "sport": "Tennis", "league": "Tennis",
@@ -280,6 +287,7 @@ SPORT_SLUGS = {
         "betole_ba": "tennis",
         "balkan_factory": "tennis",
         "kambi_factory": "tennis",
+        "onexbet": "tennis",
     },
     "golf": {
         "sport": "Golf", "league": "Golf",
@@ -372,6 +380,7 @@ SPORT_SLUGS = {
         "betole_ba": "volleyball",
         "balkan_factory": "volleyball",
         "kambi_factory": "volleyball",
+        "onexbet": "volleyball",
     },
     "handball": {
         "sport": "Handball", "league": "Handball",
@@ -401,6 +410,7 @@ SPORT_SLUGS = {
         "betole_ba": "esports",
         "balkan_factory": "esports",
         "kambi_factory": "esports",
+        "onexbet": "esports",
     },
     "rugby_league": {
         "sport": "Rugby League", "league": "Rugby League",
@@ -512,6 +522,8 @@ ALL_SPORTSBOOKS = [
     "MaxBet BA", "MaxBet MK",
     # v10.2 additions (2)
     "SoccerBet BA", "BetOle BA",
+    # v11 additions — 1xBet Family (7)
+    "1xBet", "BetWinner", "Melbet", "1xBit", "Linebet", "MegaPari", "22Bet (Direct)",
 ]
 
 SPORTSBOOK_INFO = [
@@ -578,6 +590,14 @@ SPORTSBOOK_INFO = [
     # ─── v10.2 Additions ───
     {"name": "SoccerBet BA", "type": "Balkans", "region": "Bosnia", "description": "SoccerBet Bosnia — 290 soccer events, 779KB data with ML/spread/total"},
     {"name": "BetOle BA", "type": "Balkans", "region": "Bosnia", "description": "BetOle Bosnia — 739 soccer events, 616KB data with ML/spread/total"},
+    # ——— v11 Additions — 1xBet Family ———
+    {"name": "1xBet", "type": "International", "region": "Global/Asia/LatAm", "description": "Major global sportsbook — 200+ events per sport with 1X2, Asian Handicap, Over/Under markets"},
+    {"name": "BetWinner", "type": "International", "region": "Global/Asia/LatAm", "description": "BetWinner — 1xBet family operator with identical odds across 8 sports"},
+    {"name": "Melbet", "type": "International", "region": "Asia/CIS", "description": "Melbet — 1xBet family operator popular in Asia and CIS region"},
+    {"name": "1xBit", "type": "Crypto", "region": "Crypto/Global", "description": "1xBit — Crypto-focused 1xBet family operator with BTC/ETH deposits"},
+    {"name": "Linebet", "type": "International", "region": "Asia/Bangladesh", "description": "Linebet — 1xBet family operator popular in South Asia"},
+    {"name": "MegaPari", "type": "International", "region": "Global", "description": "MegaPari — 1xBet family operator with global reach"},
+    {"name": "22Bet (Direct)", "type": "International", "region": "Global/Africa", "description": "22Bet Direct API — 1xBet family operator, direct service-api access with full market depth"},
 ]
 
 
@@ -736,6 +756,15 @@ async def fetch_sport_all_books(sport_key: str) -> List[SportsbookSnapshot]:
                 balkan_factory.fetch_operator_sport(op_id, bf_sport)
             ))
 
+
+    # ── 1xBet Family Operators (7 books) ──
+    ox_sport = slug_info.get("onexbet")
+    if ox_sport:
+        for op_id, op_info in onexbet_factory.ONEXBET_OPERATORS.items():
+            tasks.append(_fetch_book(
+                op_info["name"],
+                onexbet_factory.fetch_onexbet(op_id, ox_sport)
+            ))
     # ── Leon.bet ──
     leon_sport = slug_info.get("leon")
     if leon_sport:
@@ -1014,6 +1043,49 @@ async def fetch_single_book(sport_key: str, sportsbook: str) -> List[SportsbookS
             sport = slug_info.get("pinnacle_guest")
             if sport:
                 snapshots = await pinnacle_guest.fetch_sport(sport)
+        # ── 1xBet Family Operators ──
+        elif sb == "1xbet":
+            sport = slug_info.get("onexbet")
+            if sport:
+                snap = await onexbet_factory.fetch_onexbet("1xbet", sport)
+                if snap:
+                    snapshots = [snap]
+        elif sb == "betwinner":
+            sport = slug_info.get("onexbet")
+            if sport:
+                snap = await onexbet_factory.fetch_onexbet("betwinner", sport)
+                if snap:
+                    snapshots = [snap]
+        elif sb == "melbet":
+            sport = slug_info.get("onexbet")
+            if sport:
+                snap = await onexbet_factory.fetch_onexbet("melbet", sport)
+                if snap:
+                    snapshots = [snap]
+        elif sb == "1xbit":
+            sport = slug_info.get("onexbet")
+            if sport:
+                snap = await onexbet_factory.fetch_onexbet("1xbit", sport)
+                if snap:
+                    snapshots = [snap]
+        elif sb == "linebet":
+            sport = slug_info.get("onexbet")
+            if sport:
+                snap = await onexbet_factory.fetch_onexbet("linebet", sport)
+                if snap:
+                    snapshots = [snap]
+        elif sb == "megapari":
+            sport = slug_info.get("onexbet")
+            if sport:
+                snap = await onexbet_factory.fetch_onexbet("megapari", sport)
+                if snap:
+                    snapshots = [snap]
+        elif sb in ("22bet(direct)", "22betdirect", "22bet_direct"):
+            sport = slug_info.get("onexbet")
+            if sport:
+                snap = await onexbet_factory.fetch_onexbet("22bet_direct", sport)
+                if snap:
+                    snapshots = [snap]
 
     except Exception as e:
         print(f"[Aggregator] Error from {sportsbook}: {e}")

@@ -1,6 +1,6 @@
-# 🏈 Sportsbook Odds Aggregation API v10.2.0
+# 🏈 Sportsbook Odds Aggregation API v11.0.0
 
-Real-time sports betting odds aggregated from **51+ sportsbooks** via direct API scraping. No API keys required. No third-party middlemen.
+Real-time sports betting odds aggregated from **58+ sportsbooks** via direct API scraping. No API keys required. No third-party middlemen.
 
 [![Deploy on Railway](https://railway.app/button.svg)](https://railway.app/template/sportsbook-api)
 
@@ -8,7 +8,7 @@ Real-time sports betting odds aggregated from **51+ sportsbooks** via direct API
 
 ## 🚀 Features
 
-- **47+ Sportsbooks** scraped in real-time
+- **58+ Sportsbooks** scraped in real-time
 - **24 Sports** covered (NBA, NFL, MLB, NHL, Soccer, Tennis, MMA, and more)
 - **Cross-book comparison** — find the best odds instantly
 - **Live odds** support for in-play betting
@@ -27,6 +27,7 @@ Real-time sports betting odds aggregated from **51+ sportsbooks** via direct API
 | **Offshore** | Bovada |
 | **Sharp** | Pinnacle, Pinnacle v3 (Arcadia), Pinnacle (Guest) |
 | **EU/International** | Kambi/Unibet, Unibet (Detail), PAF (Detail), Svenska Spel, ATG, Unibet UK/SE/NL/BE/RO/DE/DK/CA, 22Bet, Coolbet, ComeOn, Leon.bet, 888sport IT, Bingoal, BetCity NL |
+| **1xBet Family** | 1xBet, BetWinner, Melbet, 1xBit, Linebet, MegaPari, 22Bet (Direct) |
 | **Balkans** | MaxBet, MaxBet BA, MaxBet MK, SoccerBet RS, SoccerBet BA, Merkur RS, BetOle RS, BetOle BA |
 | **Australia** | Ladbrokes AU, Neds AU, PointsBet |
 | **Exchanges** | Smarkets, Matchbook |
@@ -334,7 +335,17 @@ This project is for educational and personal use only. Ensure compliance with th
 
 ## 🔄 Changelog
 
-### v10.2.0 (Current)
+### v11.0.0 (Current)
+- **Added 1xBet Family — 7 new global/Asian/LatAm sportsbooks**
+- 1xBet, BetWinner, Melbet, 1xBit, Linebet, MegaPari, 22Bet (Direct)
+- All use the 1xBet service-api with identical data structures
+- Supports 8 sports: Soccer, Basketball, Baseball, Ice Hockey, Tennis, Volleyball, MMA/Boxing, Esports
+- 200+ events per sport per book with 1X2, Asian Handicap, Over/Under markets
+- Uses aiohttp with TLS bypass for reliable access
+- Created onexbet_factory for scalable 1xBet family operator support
+- Total: 58 sportsbooks, 24 sports
+
+### v10.2.0
 - **Added SoccerBet BA (Bosnia) — 290 soccer events, 779KB data via Balkan API**
 - **Added BetOle BA (Bosnia) — 739 soccer events, 616KB data via Balkan API**
 - Both books support ML/spread/total markets across 12 sports
