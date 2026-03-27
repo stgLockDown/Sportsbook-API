@@ -603,16 +603,28 @@ SPORTSBOOK_INFO = [
 
 # ─── Fetching ─────────────────────────────────────────────────────────
 
+# Concurrency limiter: max 15 simultaneous sportsbook fetches
+_FETCH_SEMAPHORE = asyncio.Semaphore(15)
+# Per-book timeout in seconds
+_BOOK_TIMEOUT = 25
+
+
 async def _fetch_book(book_name: str, coro) -> Tuple[str, List[SportsbookSnapshot]]:
-    """Wrapper to catch exceptions from individual book fetches."""
-    try:
-        result = await coro
-        if isinstance(result, list):
-            return (book_name, result)
-        return (book_name, [])
-    except Exception as e:
-        print(f"[Aggregator] Error from {book_name}: {e}")
-        return (book_name, [])
+    """Wrapper with semaphore, timeout, and error handling."""
+    async with _FETCH_SEMAPHORE:
+        try:
+            result = await asyncio.wait_for(coro, timeout=_BOOK_TIMEOUT)
+            if isinstance(result, list):
+                return (book_name, result)
+            if isinstance(result, SportsbookSnapshot):
+                return (book_name, [result])
+            return (book_name, [])
+        except asyncio.TimeoutError:
+            print(f"[Aggregator] Timeout ({_BOOK_TIMEOUT}s) from {book_name}")
+            return (book_name, [])
+        except Exception as e:
+            print(f"[Aggregator] Error from {book_name}: {e}")
+            return (book_name, [])
 
 
 async def fetch_sport_all_books(sport_key: str) -> List[SportsbookSnapshot]:
@@ -1186,39 +1198,89 @@ def _events_match(ev1: Event, ev2: Event) -> bool:
     return False
 
 
+def _event_bucket_key(ev: Event) -> str:
+    """Generate a hash bucket key for fast event matching.
+    Normalizes team names and rounds start_time to 2-hour windows."""
+    home = _normalize_team(ev.home_team)
+    away = _normalize_team(ev.away_team)
+    # Sort so home/away order doesn't matter
+    pair = tuple(sorted([home, away]))
+    # Round start time to 2-hour window for grouping
+    time_bucket = ""
+    if ev.start_time:
+        ts = int(ev.start_time.timestamp())
+        time_bucket = str(ts // 7200)
+    return f"{pair[0]}|{pair[1]}|{time_bucket}"
+
+
+def _event_bucket_keys(ev: Event) -> List[str]:
+    """Generate multiple bucket keys to handle time-window edge cases."""
+    home = _normalize_team(ev.home_team)
+    away = _normalize_team(ev.away_team)
+    pair = tuple(sorted([home, away]))
+    base = f"{pair[0]}|{pair[1]}"
+    keys = [base]  # Always include time-independent key
+    if ev.start_time:
+        ts = int(ev.start_time.timestamp())
+        bucket = ts // 7200
+        keys.append(f"{base}|{bucket}")
+    return keys
+
+
 def aggregate_events(snapshots: List[SportsbookSnapshot]) -> List[AggregatedEvent]:
-    """Match events across sportsbooks and aggregate."""
-    aggregated: List[AggregatedEvent] = []
-    all_events: List[Tuple[str, Event]] = []
+    """Match events across sportsbooks and aggregate.
+    Uses hash bucketing for O(n) performance instead of O(n²)."""
+    # Bucket: key -> AggregatedEvent
+    buckets: Dict[str, AggregatedEvent] = {}
+    # Track which bucket each AggregatedEvent is stored under (primary key)
+    agg_primary: Dict[int, str] = {}  # id(agg) -> primary_key
+
     for snap in snapshots:
         for ev in snap.events:
-            all_events.append((snap.sportsbook, ev))
+            book = snap.sportsbook
+            keys = _event_bucket_keys(ev)
 
-    matched_indices = set()
-    for i, (book1, ev1) in enumerate(all_events):
-        if i in matched_indices:
-            continue
-        agg = AggregatedEvent(
-            home_team=ev1.home_team,
-            away_team=ev1.away_team,
-            sport=ev1.sport,
-            league=ev1.league,
-            start_time=ev1.start_time,
-            is_live=ev1.is_live,
-            sportsbook_odds={book1: ev1},
-        )
-        matched_indices.add(i)
-        for j, (book2, ev2) in enumerate(all_events):
-            if j in matched_indices:
-                continue
-            if book2 == book1:
-                continue
-            if _events_match(ev1, ev2):
-                agg.sportsbook_odds[book2] = ev2
-                matched_indices.add(j)
-                if ev2.is_live:
-                    agg.is_live = True
-        aggregated.append(agg)
+            # Check if this event matches an existing bucket
+            matched_agg = None
+            for key in keys:
+                if key in buckets:
+                    matched_agg = buckets[key]
+                    break
+
+            if matched_agg is not None:
+                # Add to existing aggregated event (skip if same book already there)
+                if book not in matched_agg.sportsbook_odds:
+                    matched_agg.sportsbook_odds[book] = ev
+                    if ev.is_live:
+                        matched_agg.is_live = True
+                # Ensure all keys point to same agg
+                for key in keys:
+                    if key not in buckets:
+                        buckets[key] = matched_agg
+            else:
+                # Create new aggregated event
+                agg = AggregatedEvent(
+                    home_team=ev.home_team,
+                    away_team=ev.away_team,
+                    sport=ev.sport,
+                    league=ev.league,
+                    start_time=ev.start_time,
+                    is_live=ev.is_live,
+                    sportsbook_odds={book: ev},
+                )
+                for key in keys:
+                    buckets[key] = agg
+                agg_primary[id(agg)] = keys[0]
+
+    # Deduplicate — collect unique AggregatedEvents
+    seen_ids = set()
+    aggregated: List[AggregatedEvent] = []
+    for agg in buckets.values():
+        agg_id = id(agg)
+        if agg_id not in seen_ids:
+            seen_ids.add(agg_id)
+            aggregated.append(agg)
+
     return aggregated
 
 

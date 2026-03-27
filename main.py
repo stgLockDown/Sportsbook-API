@@ -251,6 +251,7 @@ async def get_odds_single_book(
 async def compare_odds(
     sport: str,
     market: Optional[str] = Query("moneyline", description="Market type to compare"),
+    limit: int = Query(100, ge=1, le=500, description="Max events to return"),
 ):
     """Compare odds across sportsbooks and find best lines."""
     sport = sport.lower()
@@ -302,17 +303,27 @@ async def compare_odds(
         if comp["best_prices"] or comp["all_odds"]:
             comparisons.append(comp)
 
+    # Sort by number of sportsbooks (most coverage first), then apply limit
+    comparisons.sort(key=lambda c: c["num_sportsbooks"], reverse=True)
+    total_before_limit = len(comparisons)
+    comparisons = comparisons[:limit]
+
     return {
         "sport": sport,
         "market": market,
-        "total_events": len(comparisons),
+        "total_events": total_before_limit,
+        "returned_events": len(comparisons),
         "multi_book_events": len([c for c in comparisons if c["num_sportsbooks"] > 1]),
+        "limit": limit,
         "comparisons": comparisons,
     }
 
 
 @app.get("/events/{sport}")
-async def get_aggregated_events(sport: str):
+async def get_aggregated_events(
+    sport: str,
+    limit: int = Query(100, ge=1, le=500, description="Max events to return"),
+):
     """Get aggregated events with all sportsbook odds side-by-side."""
     sport = sport.lower()
     snapshots = await fetch_sport_all_books(sport)
@@ -340,9 +351,16 @@ async def get_aggregated_events(sport: str):
 
         events.append(ev)
 
+    # Sort by coverage (most sportsbooks first), then limit
+    events.sort(key=lambda e: e["num_sportsbooks"], reverse=True)
+    total_before_limit = len(events)
+    events = events[:limit]
+
     return {
         "sport": sport,
-        "total_events": len(events),
+        "total_events": total_before_limit,
+        "returned_events": len(events),
+        "limit": limit,
         "events": events,
     }
 
