@@ -98,27 +98,110 @@ def _parse_line(line_val) -> Optional[float]:
 
 
 def _classify_market(criterion_label: str) -> Optional[MarketType]:
-    """Classify a Kambi criterion label into our MarketType."""
+    """Classify a Kambi criterion label into our MarketType - COMPREHENSIVE MODE."""
     label_lower = criterion_label.lower()
 
+    # Core markets
     if "moneyline" in label_lower:
         return MarketType.MONEYLINE
     if label_lower == "match":
         return MarketType.MONEYLINE
+    if label_lower in ["1x2", "full time result", "draw no bet"]:
+        return MarketType.MONEYLINE  # 3-way moneyline
+    
+    # Spread markets
     if "spread" in label_lower or "handicap" in label_lower or "puck line" in label_lower or "run line" in label_lower:
         return MarketType.SPREAD
+    
+    # Total markets
     if "total" in label_lower or "over/under" in label_lower:
         return MarketType.TOTAL
-    if "1x2" in label_lower or "full time" in label_lower:
-        return MarketType.MONEYLINE  # 3-way moneyline
 
-    # Skip futures/props/exotic
-    skip_keywords = ["winner", "champion", "mvp", "rookie", "defensive", "finishing",
-                     "division", "conference", "first overall", "second overall",
-                     "first wide receiver", "odd/even", "to be champion"]
-    for kw in skip_keywords:
-        if kw in label_lower:
-            return None
+    # Player Props - EXTENSIVE KEYWORD MATCHING
+    player_keywords = [
+        # Points scoring
+        'points', 'score', 'field goals', 'scoring', 'baskets scored',
+        # Rebounds
+        'rebounds', 'boards', 'total rebounds', 'offensive rebounds', 'defensive rebounds',
+        # Assists
+        'assists', 'helper', 'total assists',
+        # Shooting
+        'three pointers made', '3-pointers', 'threes', '3-point shots', '3s made',
+        'field goals made', 'two pointers', 'ft made', 'free throws',
+        # Defense
+        'blocks', 'steals', ' tackles', 'interceptions', 'saves',
+        # Combined stats
+        'points + rebounds', 'points + assists', 'rebounds + assists',
+        'points + rebounds + assists', 'double double', 'triple double',
+        'points/rebounds/assists', 'pra', 'ppa',
+        # Turnovers/misc
+        'turnovers', 'fouls', 'personal fouls',
+        # Performance props
+        'total bases', 'hits', 'home runs', 'rbi', 'runs', 'strikeouts', 'walks',
+        'passing yards', 'rushing yards', 'receiving yards', 'touchdowns',
+        'completions', 'attempts', 'interceptions thrown', 'passing tds',
+        'rushing attempts', 'carries', ' receptions', 'receiving tds',
+        # Soccer props
+        'shots on target', 'shots', 'goals', 'assists soccer',
+        # Golf props
+        'strokes', 'holes', 'birdies', 'pars', 'bogeys',
+        # Tennis props
+        'aces', 'games won', 'sets won', 'break points',
+        # Other
+        'player', 'individual', 'single player'
+    ]
+    
+    for keyword in player_keywords:
+        if keyword in label_lower:
+            return MarketType.PLAYER_PROP
+
+    # Team Props
+    team_keywords = [
+        'team total', 'team over', 'team under', 'first half team',
+        'team to score', 'highest scoring quarter', 'highest scoring half',
+        'team points', 'team runs', 'team goals', 'team rebounds',
+        'team assists', 'margin of victory', 'winning margin',
+        'team special teams', 'defense/special teams'
+    ]
+    
+    for keyword in team_keywords:
+        if keyword in label_lower:
+            return MarketType.TEAM_PROP
+
+    # Game Props
+    game_keywords = [
+        'highest scoring', 'total points', 'both teams to score', 'alternate total',
+        'odd/even', 'total goals', 'total runs', 'total baskets',
+        'first to score', 'last to score', 'score first touchdown',
+        'will there be overtime', 'anytime touchdown', 'first touchdown',
+        'last touchdown', 'touchdown scorer',
+        # Soccer-specific
+        'cleansheet', 'correct score', 'first half', 'second half',
+        'draw no bet', 'double chance',
+        # Basketball-specific
+        'quarter', 'half', 'period', 'overtime'
+    ]
+    
+    for keyword in game_keywords:
+        if keyword in label_lower:
+            return MarketType.GAME_PROP
+
+    # Futures - only skip true futures, not game-specific props
+    futures_keywords = [
+        'champion', 'to win the', 'outright winner', 'mvp', 'rookie of the year',
+        'defensive player', 'coach of the year',
+        'first overall pick', 'second overall pick',
+        'division winner', 'conference winner', 'finals mvp'
+    ]
+    
+    for keyword in futures_keywords:
+        if keyword in label_lower:
+            return None  # Skip outright futures
+
+    # Default: classify as GAME_PROP for anything else that looks like a prop
+    # This catches alternate lines, team totals, etc.
+    if '-' in criterion_label or '/' in criterion_label or ' vs ' in label_lower:
+        return MarketType.GAME_PROP
 
     return None
 
@@ -133,7 +216,7 @@ def _parse_event_and_offers(event_data: dict, bet_offers: list, sport: str) -> O
         start_str = event_data.get("start", "")
         state = event_data.get("state", "")
 
-        # Skip non-match events (futures, specials)
+        # Skip non-match events (futures, specials) but keep award futures as they have props
         if not home_name and not away_name:
             if " - " in name:
                 parts = name.split(" - ", 1)
@@ -148,7 +231,9 @@ def _parse_event_and_offers(event_data: dict, bet_offers: list, sport: str) -> O
                 away_name = parts[0].strip()
                 home_name = parts[1].strip()
             else:
-                return None
+                # Future/award events without home/away - still include them for their props
+                # These are futures like "Most Outstanding Player Award"
+                pass
 
         # Parse start time
         start_time = None
@@ -220,7 +305,8 @@ def _parse_event_and_offers(event_data: dict, bet_offers: list, sport: str) -> O
             markets=markets,
         )
     except Exception as e:
-        logger.error(f"Error parsing Kambi event: {e}")
+        import traceback
+        logger.error(f"Error parsing Kambi event: {e}\n{traceback.format_exc()}")
         return None
 
 
@@ -257,13 +343,16 @@ async def fetch_events_listview(sport: str, client: httpx.AsyncClient) -> List[E
 
 
 async def fetch_events_group(sport: str, client: httpx.AsyncClient) -> List[Event]:
-    """Fetch events using the betoffer/group endpoint (by sport group ID)."""
+    """Fetch events using the betoffer/group endpoint (by sport group ID).
+    
+    Uses large range_size to get comprehensive market coverage including props.
+    """
     group_id = SPORT_GROUP_IDS.get(sport)
     if not group_id:
         return []
 
     url = f"{BASE_URL}/betoffer/group/{group_id}.json"
-    params = {"lang": "en_US", "market": "US", "range_size": 100}
+    params = {"lang": "en_US", "market": "US", "range_size": 5000}  # Increased from 100 to 5000
 
     events = []
     try:
@@ -297,14 +386,19 @@ async def fetch_events_group(sport: str, client: httpx.AsyncClient) -> List[Even
 
 
 async def fetch_sport(sport: str) -> List[SportsbookSnapshot]:
-    """Main entry point - fetch events for a sport from Kambi/Unibet."""
+    """Main entry point - fetch events for a sport from Kambi/Unibet.
+    
+    Uses group endpoint as primary to get comprehensive market coverage.
+    Group endpoint provides all bet offers including props, game props, etc.
+    """
     async with httpx.AsyncClient(timeout=30, headers=HEADERS) as client:
-        # Try listView first (better for match events with inline odds)
-        events = await fetch_events_listview(sport, client)
+        # Use group endpoint as primary - provides comprehensive market coverage
+        # including props, game props, team props, and alternate lines
+        events = await fetch_events_group(sport, client)
 
+        # Fall back to listView only if group returns nothing
         if not events:
-            # Fall back to group endpoint
-            events = await fetch_events_group(sport, client)
+            events = await fetch_events_listview(sport, client)
 
     logger.info(f"Kambi/Unibet: {len(events)} {sport} events")
 

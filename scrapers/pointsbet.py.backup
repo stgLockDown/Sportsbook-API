@@ -1,6 +1,5 @@
 """
 PointsBet Scraper — US sportsbook with deep market coverage.
-Enhanced to capture ALL available markets including player props, team props, alternate lines.
 
 Uses two-step approach:
 1. Get event list from competitions/{id}/events/featured
@@ -15,7 +14,7 @@ from datetime import datetime, timezone
 from typing import List, Optional
 from scrapers.models import Event, Market, Outcome, SportsbookSnapshot, MarketType
 
-# ─── Competition IDs ───────────────────────────────────────
+# ── Competition IDs ─────────────────────────────────────────────────
 COMPETITION_IDS = {
     "basketball_nba": 7176,
     "basketball_ncaab": 7178,
@@ -50,80 +49,8 @@ def _decimal_to_american(decimal_odds: float) -> Optional[int]:
         return int(round(-100 / (decimal_odds - 1)))
 
 
-def _classify_market(market_name: str) -> MarketType:
-    """
-    Enhanced market classification for PointsBet.
-    Detects player props, team props, game props, alternate lines.
-    """
-    name_lower = market_name.lower()
-    
-    # PLAYER PROPS - Player-specific betting markets
-    player_prop_keywords = [
-        # Basketball props
-        'points', 'rebounds', 'assists', 'threes', 'made threes',
-        'three pointers', 'three point', '3-point', '3 point', 'blocks', 'steals',
-        'turnovers', 'double double', 'triple double', 'points + rebounds',
-        'points + assists', 'rebounds + assists', 'p+r', 'p+a', 'r+a',
-        # Football props
-        'passing yards', 'passing touchdowns', 'rushing yards', 'rushing touchdowns',
-        'receiving yards', 'receiving touchdowns', 'completions', 'interceptions',
-        'sacks', 'tackles', 'tackles + assists', 'first downs', 'touchdowns scored',
-        # Baseball props
-        'total bases', 'hits', 'home runs', 'runs batted in', 'strikeouts',
-        'hits allowed', 'runs allowed', 'innings pitched', 'strikeouts thrown',
-        # Hockey props
-        'goals', 'shots on goal', 'saves', 'first period goal', 'anytime goal',
-        'last goal', 'goals scored',
-        # Tennis props
-        'aces', 'double faults', 'games won', 'sets won', 'break points',
-        # General player indicators
-        'player', 'pts', 'reb', 'ast', 'performance', 'to make', 'to be', 'to have',
-    ]
-    
-    if any(keyword in name_lower for keyword in player_prop_keywords):
-        return MarketType.PLAYER_PROP
-    
-    # TEAM PROPS - Team-specific performance markets
-    team_prop_keywords = [
-        'team to score', 'team to score first', 'team to score last',
-        'team to score most', 'team total', 'team points',
-        'first basket', 'first field goal', 'first touchdown',
-        'highest scoring quarter', 'highest scoring half',
-        'team with most', 'team leads at', 'race to',
-        'winning margin', 'exact score',
-        'quarter', 'period', 'inning', 'half',
-    ]
-    
-    if any(keyword in name_lower for keyword in team_prop_keywords):
-        return MarketType.PLAYER_PROP  # Map to PLAYER_PROP for now
-    
-    # GAME PROPS - Game-specific markets
-    game_prop_keywords = [
-        'alternatives', 'alternate', 'both teams score', 'btts',
-        'draw no bet', 'double chance', 'overtime', 'special', 'novelty',
-    ]
-    
-    if any(keyword in name_lower for keyword in game_prop_keywords):
-        return MarketType.OTHER  # Map to OTHER for now
-    
-    # CORE MARKETS
-    if "moneyline" in name_lower or "money line" in name_lower or "match result" in name_lower:
-        return MarketType.MONEYLINE
-    elif "spread" in name_lower or "handicap" in name_lower:
-        return MarketType.SPREAD
-    elif "total" in name_lower:
-        return MarketType.TOTAL
-    elif "future" in name_lower or "outright" in name_lower or "outright" in name_lower:
-        return MarketType.FUTURES
-    
-    return MarketType.OTHER
-
-
 def _parse_markets_from_detail(detail: dict) -> List[Market]:
-    """
-    Parse ALL markets from PointsBet event detail response.
-    Enhanced to capture player props, team props, alternate lines, etc.
-    """
+    """Parse markets from PointsBet event detail response."""
     markets: List[Market] = []
     fom = detail.get("fixedOddsMarkets", [])
 
@@ -133,16 +60,29 @@ def _parse_markets_from_detail(detail: dict) -> List[Market]:
         if not outcomes_raw:
             continue
 
-        # Use enhanced market classification
-        market_type = _classify_market(market_name)
+        # Determine market type from name
+        name_lower = market_name.lower()
+        if "moneyline" in name_lower or "money line" in name_lower or "match result" in name_lower:
+            mtype = MarketType.MONEYLINE
+        elif "spread" in name_lower or "handicap" in name_lower:
+            mtype = MarketType.SPREAD
+        elif "total" in name_lower and ("over" in name_lower or "under" in name_lower or
+              any("over" in o.get("name", "").lower() or "under" in o.get("name", "").lower() for o in outcomes_raw)):
+            mtype = MarketType.TOTAL
+        elif "player" in name_lower or "pts" in name_lower or "reb" in name_lower or "ast" in name_lower:
+            mtype = MarketType.PLAYER_PROP
+        else:
+            mtype = MarketType.OTHER
 
-        # REMOVED FILTERING: Now capture ALL market types, not just core
-        # Old code was: if mtype not in (MarketType.MONEYLINE, MarketType.SPREAD, MarketType.TOTAL): continue
+        # Only include main markets (ML, spread, total) to keep response size manageable
+        if mtype not in (MarketType.MONEYLINE, MarketType.SPREAD, MarketType.TOTAL):
+            continue
 
-        # REMOVED ALTERNATE LINE FILTERING: Now capture alternate lines too
-        # Old code was: if mtype in (MarketType.SPREAD, MarketType.TOTAL) and len(outcomes_raw) > 2: continue
+        # Skip alternate lines (keep only primary markets with 2 outcomes)
+        if mtype in (MarketType.SPREAD, MarketType.TOTAL) and len(outcomes_raw) > 2:
+            # This is an alternate lines market, skip it
+            continue
 
-        # Parse outcomes
         outcomes = []
         for o in outcomes_raw:
             price = o.get("price")
@@ -158,7 +98,7 @@ def _parse_markets_from_detail(detail: dict) -> List[Market]:
 
         if outcomes:
             markets.append(Market(
-                market_type=market_type,
+                market_type=mtype,
                 name=market_name,
                 outcomes=outcomes,
             ))
@@ -167,10 +107,7 @@ def _parse_markets_from_detail(detail: dict) -> List[Market]:
 
 
 async def fetch_sport(sport: str) -> List[SportsbookSnapshot]:
-    """
-    Fetch odds from PointsBet for a given sport.
-    Captures ALL available markets including player props, team props, alternate lines.
-    """
+    """Fetch odds from PointsBet for a given sport."""
     comp_id = COMPETITION_IDS.get(sport)
     if comp_id is None:
         return []
@@ -234,7 +171,6 @@ async def fetch_sport(sport: str) -> List[SportsbookSnapshot]:
         # Check if live
         is_live = meta.get("liveEventCount", 0) > 0
 
-        # Parse ALL markets now
         markets = _parse_markets_from_detail(detail)
         if not markets:
             continue
@@ -261,3 +197,23 @@ async def fetch_sport(sport: str) -> List[SportsbookSnapshot]:
         fetched_at=now,
         events=events,
     )]
+
+
+# ── Test ────────────────────────────────────────────────────────────
+if __name__ == "__main__":
+    async def _test():
+        for sport in ["basketball_nba", "ice_hockey_nhl", "baseball_mlb",
+                       "american_football_nfl", "soccer_epl"]:
+            print(f"\n{'='*60}")
+            print(f"Sport: {sport}")
+            print(f"{'='*60}")
+            snaps = await fetch_sport(sport)
+            for s in snaps:
+                print(f"  {s.sportsbook}: {len(s.events)} events")
+                for ev in s.events[:3]:
+                    live_tag = " [LIVE]" if ev.is_live else ""
+                    print(f"    {ev.away_team} @ {ev.home_team}{live_tag}")
+                    for m in ev.markets[:5]:
+                        outs = ", ".join([f"{o.name}: {o.price_decimal} ({o.price_american})" for o in m.outcomes])
+                        print(f"      {m.market_type.value}: {outs}")
+    asyncio.run(_test())

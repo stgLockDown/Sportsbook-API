@@ -14,6 +14,8 @@ class MarketType(str, Enum):
     SPREAD = "spread"
     TOTAL = "total"
     PLAYER_PROP = "player_prop"
+    TEAM_PROP = "team_prop"
+    GAME_PROP = "game_prop"
     FUTURES = "futures"
     OTHER = "other"
 

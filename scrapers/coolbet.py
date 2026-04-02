@@ -159,6 +159,66 @@ def _parse_betoffer_detail(detail_data: dict, base_event: Event) -> Event:
             mkt = _parse_total(outcomes)
             if mkt:
                 markets.append(mkt)
+        
+        # Player Props - EXTENSIVE KEYWORD MATCHING
+        player_keywords = [
+            # Scoring Props
+            'Points', 'Assists', 'Rebounds', 'Three Pointers', '3-Pointers',
+            'Touchdowns', 'Rushing Yards', 'Passing Yards', 'Receiving Yards', 'Receptions',
+            'Completions', 'Interceptions', 'Sacks', 'Tackles', 'Field Goals', 'Extra Points',
+            # Basketball specific
+            'Double-Double', 'Triple-Double', 'Assists + Rebounds', 'Points + Rebounds',
+            'Points + Assists', 'Points + Rebounds + Assists',
+            # Baseball specific
+            'Hits', 'Runs', 'Home Runs', 'RBI', 'Stolen Bases', 'Strikeouts', 'Walks',
+            'Total Bases', 'Hits + Runs + RBIs',
+            # Soccer specific
+            'Goals', 'Shots On Target', 'Cards', 'Offsides', 'Fouls',
+            # Tennis specific
+            'Aces', 'Double Faults', 'Break Points', 'Games Won', 'Sets Won',
+            # Special Stats
+            'Longest', 'First', 'Last', 'Anytime', 'Any Time', 'Score A', 'Record', 'Performance',
+            # MVP/Awards
+            'MVP', 'Player Of The Match', 'Man Of The Match', 'Most Valuable'
+        ]
+        
+        # Team Props
+        team_keywords = [
+            'Team Total', 'Race To', 'Highest Scoring', 'Margin',
+            'Winning Margin', 'First To Score', 'Last To Score', 'Clean Sheet',
+            'To Score First', 'To Score Last', 'Both Teams To Score', 'Highest Scoring Quarter'
+        ]
+        
+        # Game Props
+        game_keywords = [
+            'Both Teams To Score', 'Correct Score', 'Draw No Bet',
+            'Double Chance', 'Match Result', 'Outright Winner',
+            'Extra Innings', 'Overtime', 'Penalties', 'Penalty Shootout'
+        ]
+        
+        # Check if this is a player prop
+        if any(kw in label for kw in player_keywords):
+            market = _parse_prop_market(outcomes, MarketType.PLAYER_PROP, label)
+            if market:
+                markets.append(market)
+        
+        # Check if this is a team prop
+        elif any(kw in label for kw in team_keywords):
+            market = _parse_prop_market(outcomes, MarketType.TEAM_PROP, label)
+            if market:
+                markets.append(market)
+        
+        # Check if this is a game prop
+        elif any(kw in label for kw in game_keywords):
+            market = _parse_prop_market(outcomes, MarketType.GAME_PROP, label)
+            if market:
+                markets.append(market)
+        
+        # Catch-all for unclassified markets (include as OTHER for comprehensive coverage)
+        else:
+            market = _parse_prop_market(outcomes, MarketType.OTHER, label)
+            if market:
+                markets.append(market)
 
     if markets:
         base_event.markets = markets
@@ -232,6 +292,33 @@ def _parse_total(outcomes: list) -> Optional[Market]:
         ))
     if len(parsed) >= 2:
         return Market(market_type=MarketType.TOTAL, name="Total", outcomes=parsed)
+    return None
+
+
+def _parse_prop_market(outcomes: list, market_type: MarketType, label: str) -> Optional[Market]:
+    """
+    Parse prop markets (player, team, game props) - COMPREHENSIVE MODE.
+    """
+    parsed = []
+    for oc in outcomes:
+        odds_raw = oc.get("odds")
+        if not odds_raw:
+            continue
+        dec = _kambi_odds_to_decimal(odds_raw)
+        american = _decimal_to_american(dec)
+        line_raw = oc.get("line")
+        point = _kambi_line(line_raw) if line_raw else None
+        oc_label = oc.get("label", oc.get("englishLabel", "?"))
+        
+        parsed.append(Outcome(
+            name=oc_label,
+            price_american=american,
+            price_decimal=dec,
+            point=point,
+        ))
+    
+    if parsed:
+        return Market(market_type=market_type, name=label, outcomes=parsed)
     return None
 
 
@@ -312,11 +399,11 @@ async def fetch_sport(sport_key: str) -> List[SportsbookSnapshot]:
                 events.append(parsed)
                 event_ids_for_detail.append(parsed.event_id)
 
-        # Step 2: Fetch full betoffer detail for up to 25 events
+        # Step 2: Fetch full betoffer detail for up to 50 events (increased for comprehensive coverage)
         if event_ids_for_detail:
             detail_tasks = [
                 _fetch_event_detail(client, eid)
-                for eid in event_ids_for_detail[:25]
+                for eid in event_ids_for_detail[:50]
             ]
             detail_results = await asyncio.gather(*detail_tasks, return_exceptions=True)
 

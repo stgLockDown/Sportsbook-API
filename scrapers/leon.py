@@ -235,7 +235,7 @@ def _decimal_to_american(dec: float) -> Optional[int]:
 
 
 def _parse_market(market_data: dict) -> Optional[Market]:
-    """Parse a single market from Leon.bet event data."""
+    """Parse a single market from Leon.bet event data - COMPREHENSIVE MODE."""
     name = market_data.get("name", "")
     runners = market_data.get("runners", [])
     if not runners:
@@ -243,17 +243,105 @@ def _parse_market(market_data: dict) -> Optional[Market]:
 
     name_lower = name.lower()
 
-    # Determine market type
+    # PRIORITIZE Half/Quarter Specific Markets first
+    if '1st half' in name_lower or 'first half' in name_lower or '1st quarter' in name_lower or 'first quarter' in name_lower:
+        if 'handicap' in name_lower or 'spread' in name_lower:
+            return _build_market(MarketType.SPREAD, name, runners)
+        elif 'total' in name_lower:
+            return _build_market(MarketType.TOTAL, name, runners)
+        else:
+            return _build_market(MarketType.GAME_PROP, name, runners)
+    elif '2nd half' in name_lower or 'second half' in name_lower or '2nd quarter' in name_lower or 'second quarter' in name_lower:
+        if 'handicap' in name_lower or 'spread' in name_lower:
+            return _build_market(MarketType.SPREAD, name, runners)
+        elif 'total' in name_lower:
+            return _build_market(MarketType.TOTAL, name, runners)
+        else:
+            return _build_market(MarketType.GAME_PROP, name, runners)
+    
+    # Player Props - EXTENSIVE KEYWORD MATCHING
+    player_keywords = [
+        # Points scoring
+        'points', 'score', 'field goals', 'baskets scored', 'points scored',
+        # Rebounds
+        'rebounds', 'boards', 'total rebounds', 'offensive rebounds', 'defensive rebounds',
+        # Assists
+        'assists', 'helper', 'total assists',
+        # Shooting
+        'three pointers', '3-pointers', 'threes', '3s', '3-point shots',
+        'field goals made', '2 pointers', 'free throws', 'ft made',
+        # Defense
+        'blocks', 'steals', 'tackles', 'interceptions', 'saves',
+        # Combined stats
+        'points + rebounds', 'points + assists', 'rebounds + assists',
+        'points + rebounds + assists', 'double double', 'triple double',
+        'points/rebounds/assists', 'pra', 'ppa',
+        # Turnovers/misc
+        'turnovers', 'fouls', 'personal fouls',
+        # Performance props
+        'total bases', 'hits', 'home runs', 'rbi', 'runs', 'strikeouts', 'walks',
+        'passing yards', 'rushing yards', 'receiving yards', 'touchdowns',
+        'completions', 'attempts', 'interceptions thrown', 'passing tds',
+        'rushing attempts', 'carries', 'receptions', 'receiving tds',
+        # Other player-specific
+        'player', 'player performance', 'individual performance'
+    ]
+    
+    for keyword in player_keywords:
+        if keyword in name_lower:
+            return _build_market(MarketType.PLAYER_PROP, name, runners)
+
+    # Team Props
+    team_keywords = [
+        'team total', 'team over', 'team under',
+        'team points', 'team runs', 'team goals',
+        'team rebounds', 'team assists',
+        'highest scoring quarter', 'highest scoring half',
+        'team to score', 'first to score',
+        'winning margin', 'margin of victory',
+        'race to', 'first to'
+    ]
+    
+    for keyword in team_keywords:
+        if keyword in name_lower:
+            return _build_market(MarketType.TEAM_PROP, name, runners)
+
+    # Game Props
+    game_keywords = [
+        'both teams to score', 'btts',
+        'odd/even', 'even/odd',
+        'clean sheet', 'cleansheet',
+        'correct score',
+        'draw no bet',
+        'will there be overtime', 'overtime',
+        'first to score', 'last to score',
+        'anytime touchdown', 'first touchdown', 'last touchdown',
+        'winning margin', 'exact score', 'final score'
+    ]
+    
+    for keyword in game_keywords:
+        if keyword in name_lower:
+            return _build_market(MarketType.GAME_PROP, name, runners)
+
+    # Core Markets (Moneyline, Spread, Total, Futures)
     if name_lower in ["winner", "match winner", "moneyline", "money line",
-                       "fight winner", "to win match", "1x2"]:
+                       "fight winner", "to win match", "1x2", "to win"]:
         return _build_market(MarketType.MONEYLINE, "Moneyline", runners)
+    elif name_lower in ["outright", "tournament winner", "champion", "to win championship"]:
+        return _build_market(MarketType.FUTURES, name, runners)
     elif "handicap" in name_lower or "spread" in name_lower or "point spread" in name_lower:
         return _build_market(MarketType.SPREAD, "Spread", runners)
     elif name_lower in ["total", "total goals", "total points", "total runs",
-                         "total games", "total rounds", "over/under"]:
+                         "total games", "total rounds", "over/under", "over/under points"]:
         return _build_market(MarketType.TOTAL, "Total", runners)
+    elif "over" in name_lower and ("under" in name_lower or "points" in name_lower or "goals" in name_lower):
+        # Total variations
+        return _build_market(MarketType.TOTAL, name, runners)
     elif "winner" in name_lower and "draw" not in name_lower:
         return _build_market(MarketType.MONEYLINE, "Moneyline", runners)
+    else:
+        # Default to GAME_PROP for anything else
+        return _build_market(MarketType.GAME_PROP, name, runners)
 
     return None
 
@@ -444,20 +532,21 @@ async def fetch_sport(sport_key: str) -> List[SportsbookSnapshot]:
 
             filtered.append(ev)
 
-        # Parse events
+        # Parse events - basic parsing without markets first
         events = []
         for ev_data in filtered:
             ev = _parse_event(ev_data, sport_label, league_label)
             if ev:
                 events.append(ev)
 
-        # If we got events from changes/all but they have no markets,
-        # fetch event details for up to 20 events
-        events_needing_detail = [e for e in events if not e.markets]
-        if events_needing_detail and len(events_needing_detail) <= 30:
+        # Fetch event details for ALL events to get comprehensive market coverage
+        # The changes/all endpoint only provides basic market data
+        if events:
             detail_tasks = []
-            for ev in events_needing_detail[:20]:
+            # Limit to first 25 events to avoid overwhelming the API
+            for ev in events[:25]:
                 detail_tasks.append(_fetch_event_detail(client, ev))
+            
             detail_results = await asyncio.gather(*detail_tasks, return_exceptions=True)
             for result in detail_results:
                 if isinstance(result, Event):

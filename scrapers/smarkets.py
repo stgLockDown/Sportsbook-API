@@ -68,13 +68,13 @@ async def fetch_sport(sport: str) -> List[SportsbookSnapshot]:
 
     events = []
     try:
-        async with httpx.AsyncClient(timeout=30, headers=HEADERS) as client:
+        async with httpx.AsyncClient(timeout=60, headers=HEADERS) as client:
             # Step 1: Get upcoming events
             params = {
                 "type": event_type,
                 "state": "upcoming",
                 "limit": 50,
-                "sort": "start_datetime",
+                "sort": "start_datetime,id",
             }
 
             resp = await client.get(f"{BASE_URL}/events/", params=params)
@@ -87,9 +87,13 @@ async def fetch_sport(sport: str) -> List[SportsbookSnapshot]:
 
             if not raw_events:
                 return []
+            
+            # Limit to first 5 events for testing with rate limiting
+            raw_events = raw_events[:5]
 
             # Step 2: For each event, get markets and prices
-            sem = asyncio.Semaphore(5)
+            # Reduced to 1 to avoid rate limiting (API is very aggressive)
+            sem = asyncio.Semaphore(1)
 
             async def process_event(ev_data):
                 async with sem:
@@ -126,11 +130,11 @@ async def fetch_sport(sport: str) -> List[SportsbookSnapshot]:
 
                     is_live = state == "live"
 
-                    # Get markets for this event
+                    # Get markets for this event - Increased limit for comprehensive coverage
                     try:
                         markets_resp = await client.get(
                             f"{BASE_URL}/events/{event_id}/markets/",
-                            params={"limit": 20}
+                            params={"limit": 50}  # Reduced to 50 to avoid rate limiting
                         )
                         if markets_resp.status_code != 200:
                             return None
@@ -147,24 +151,87 @@ async def fetch_sport(sport: str) -> List[SportsbookSnapshot]:
                         market_id = mkt.get("id", "")
                         market_name = mkt.get("name", "")
 
-                        # Classify market type
+                        # Classify market type - COMPREHENSIVE
                         market_type = None
                         name_lower = market_name.lower()
-                        if "winner" in name_lower or "match odds" in name_lower or "moneyline" in name_lower or "to win" in name_lower:
-                            market_type = MarketType.MONEYLINE
-                        elif "spread" in name_lower or "handicap" in name_lower:
-                            market_type = MarketType.SPREAD
-                        elif "total" in name_lower or "over" in name_lower:
-                            market_type = MarketType.TOTAL
-                        elif "1x2" in name_lower or "result" in name_lower:
-                            market_type = MarketType.MONEYLINE
 
+                        # PRIORITIZE Half/Quarter/Period Markets first
+                        for period in ['1st quarter', '1st half', '1st set', 'first quarter', 'first half',
+                                      'first set', '2nd quarter', '2nd half', '2nd set', 'second quarter',
+                                      'second half', 'second set']:
+                            if period in name_lower:
+                                if any(kw in name_lower for kw in ['total points', 'total', 'over/under', 'over', 'under']):
+                                    market_type = MarketType.TOTAL
+                                elif any(kw in name_lower for kw in ['spread', 'handicap', 'line']):
+                                    market_type = MarketType.SPREAD
+                                else:
+                                    # Default half/quarter markets to OTHER for now
+                                    market_type = MarketType.OTHER
+                                break
+
+                        # If not a period-specific market, check main categories
                         if market_type is None:
-                            continue
+                            # Player Props - EXTENSIVE KEYWORD MATCHING
+                            player_keywords = [
+                                # Scoring Props
+                                'points', 'assists', 'rebounds', 'three pointers', '3-pointers', '3 pointers',
+                                'touchdowns', 'rushing yards', 'passing yards', 'receiving yards', 'receptions',
+                                'completions', 'interceptions', 'sacks', 'tackles', 'field goals', 'extra points',
+                                # Basketball
+                                'double-double', 'triple-double', 'assists + rebounds', 'points + rebounds',
+                                'points + assists', 'points + rebounds + assists',
+                                # Baseball
+                                'hits', 'runs', 'home runs', 'rbi', 'stolen bases', 'strikeouts', 'bases on balls', 'walks',
+                                'total bases', 'hits + runs + rbis', 'batting average',
+                                # Soccer
+                                'goals', 'shots on target', 'assists', 'cards', 'offsides', 'fouls',
+                                # Tennis
+                                'aces', 'double faults', 'break points', 'games won', 'sets won',
+                                # Special Stats
+                                'longest', 'first', 'last', 'anytime', 'score a', 'record', 'performance',
+                                # Format indicators
+                                ' over ', ' under ', 'vs', 'number'
+                            ]
+
+                            # Check if this is a player prop
+                            if any(kw in name_lower for kw in player_keywords):
+                                market_type = MarketType.PLAYER_PROP
+
+                            # Team Props
+                            elif any(kw in name_lower for kw in [
+                                'team total', 'race to', 'highest scoring', 'margin',
+                                'winning margin', 'first to score', 'last to score', 'clean sheet',
+                                'to score first', 'to score last', 'both teams to score'
+                            ]):
+                                market_type = MarketType.TEAM_PROP
+
+                            # Game Props
+                            elif any(kw in name_lower for kw in [
+                                'both teams to score', 'btts', 'correct score', 'draw no bet',
+                                'double chance', 'total goals', 'match result', 'outright winner',
+                                'extra innings', 'overtime', 'penalties'
+                            ]):
+                                market_type = MarketType.GAME_PROP
+
+                            # Core Markets
+                            elif "winner" in name_lower or "match odds" in name_lower or "moneyline" in name_lower or "to win" in name_lower or "1x2" in name_lower or "result" in name_lower:
+                                market_type = MarketType.MONEYLINE
+
+                            elif "spread" in name_lower or "handicap" in name_lower:
+                                market_type = MarketType.SPREAD
+
+                            elif "total" in name_lower or "over/under" in name_lower or ("over" in name_lower and "under" in name_lower):
+                                market_type = MarketType.TOTAL
+
+                            else:
+                                # Unclassified - include as OTHER for comprehensive coverage
+                                market_type = MarketType.OTHER
 
                         # Get contracts (outcomes)
                         try:
                             contracts_resp = await client.get(f"{BASE_URL}/markets/{market_id}/contracts/")
+                            if contracts_resp.status_code == 429:  # Rate limited - skip this market
+                                continue
                             if contracts_resp.status_code != 200:
                                 continue
                             contracts = contracts_resp.json().get("contracts", [])
@@ -177,6 +244,8 @@ async def fetch_sport(sport: str) -> List[SportsbookSnapshot]:
                         # Get quotes (best prices)
                         try:
                             prices_resp = await client.get(f"{BASE_URL}/markets/{market_id}/quotes/")
+                            if prices_resp.status_code == 429:  # Rate limited - skip this market
+                                continue
                             if prices_resp.status_code != 200:
                                 continue
                             quotes = prices_resp.json().get("quotes", {})

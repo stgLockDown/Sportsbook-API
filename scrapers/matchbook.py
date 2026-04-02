@@ -63,7 +63,7 @@ async def fetch_sport(sport: str) -> List[SportsbookSnapshot]:
             params = {
                 "sport-ids": sport_id,
                 "status": "open",
-                "per-page": 50,
+                "per-page": 100,  # Increased from 50 to get more events
                 "offset": 0,
                 "include-prices": "true",
                 "price-depth": 1,
@@ -89,13 +89,15 @@ async def fetch_sport(sport: str) -> List[SportsbookSnapshot]:
                     home_team = ""
                     away_team = ""
 
-                    for sep in [" vs ", " v ", " @ ", " - "]:
+                    for sep in [" vs ", " v ", " @ ", " at ", " - "]:
                         if sep in name:
                             parts = name.split(sep, 1)
-                            if sep == " @ ":
+                            if sep in (" @ ", " at "):
+                                # "Away @ Home" or "Away at Home" format
                                 away_team = parts[0].strip()
                                 home_team = parts[1].strip()
                             else:
+                                # "Home vs Away" or "Home - Away" format
                                 home_team = parts[0].strip()
                                 away_team = parts[1].strip()
                             break
@@ -119,17 +121,93 @@ async def fetch_sport(sport: str) -> List[SportsbookSnapshot]:
                         market_type_raw = mkt.get("market-type", "")
                         runners = mkt.get("runners", [])
 
-                        # Classify market
+                        # Classify market - COMPREHENSIVE MODE
                         market_type = None
                         name_lower = market_name.lower()
-                        if "moneyline" in name_lower or "winner" in name_lower or "match odds" in name_lower:
-                            market_type = MarketType.MONEYLINE
-                        elif "spread" in name_lower or "handicap" in name_lower:
-                            market_type = MarketType.SPREAD
-                        elif "total" in name_lower or "over" in name_lower:
-                            market_type = MarketType.TOTAL
-                        elif market_type_raw in ("one_x_two", "win-draw-win"):
-                            market_type = MarketType.MONEYLINE
+                        
+                        # DEBUG: Log half markets
+                        if 'half' in name_lower:
+                            logger.debug(f"Matchbook half market: {market_name} -> {name_lower}")
+                        
+                        # PRIORITIZE Half/Quarter Specific Markets first
+                        if '1st half' in name_lower or 'first half' in name_lower:
+                            if 'handicap' in name_lower or 'spread' in name_lower:
+                                market_type = MarketType.SPREAD
+                            elif 'total' in name_lower:
+                                market_type = MarketType.TOTAL
+                            else:
+                                market_type = MarketType.GAME_PROP
+                        elif '2nd half' in name_lower or 'second half' in name_lower:
+                            if 'handicap' in name_lower or 'spread' in name_lower:
+                                market_type = MarketType.SPREAD
+                            elif 'total' in name_lower:
+                                market_type = MarketType.TOTAL
+                            else:
+                                market_type = MarketType.GAME_PROP
+                        elif 'quarter' in name_lower:
+                            if 'handicap' in name_lower or 'spread' in name_lower:
+                                market_type = MarketType.SPREAD
+                            elif 'total' in name_lower:
+                                market_type = MarketType.TOTAL
+                            else:
+                                market_type = MarketType.GAME_PROP
+                        
+                        if market_type is None:
+                            # Player Props
+                            player_keywords = [
+                                'points', 'score', 'field goals', 'baskets',
+                                'rebounds', 'boards', 'total rebounds',
+                                'assists', 'helper',
+                                'three pointers', '3-pointers', 'threes', '3s',
+                                'blocks', 'steals', 'turnovers',
+                                'double double', 'triple double',
+                                'player', 'individual'
+                            ]
+                            for keyword in player_keywords:
+                                if keyword in name_lower:
+                                    market_type = MarketType.PLAYER_PROP
+                                    break
+                        
+                        if market_type is None:
+                            # Team Props
+                            team_keywords = [
+                                'team total', 'team over', 'team under',
+                                'highest scoring', 'team to score',
+                                'team points', 'winning margin'
+                            ]
+                            for keyword in team_keywords:
+                                if keyword in name_lower:
+                                    market_type = MarketType.TEAM_PROP
+                                    break
+                        
+                        if market_type is None:
+                            # Other Game Props
+                            game_keywords = [
+                                'both teams to score', 'odd/even',
+                                'first to score', 'last to score',
+                                'will there be overtime',
+                                'race to', 'correct score', 'draw no bet'
+                            ]
+                            for keyword in game_keywords:
+                                if keyword in name_lower:
+                                    market_type = MarketType.GAME_PROP
+                                    break
+                        
+                        if market_type is None:
+                            # Core markets (last, as fallback)
+                            if "moneyline" in name_lower or "match odds" in name_lower:
+                                market_type = MarketType.MONEYLINE
+                            elif name_lower == "winner" or market_type_raw == "outright":
+                                market_type = MarketType.FUTURES
+                            elif market_type_raw == "handicap" or "handicap" in name_lower or "spread" in name_lower:
+                                market_type = MarketType.SPREAD
+                            elif market_type_raw == "total" or "total" in name_lower or "over" in name_lower:
+                                market_type = MarketType.TOTAL
+                            elif market_type_raw in ("one_x_two", "win-draw-win"):
+                                market_type = MarketType.MONEYLINE
+                            else:
+                                # Default to GAME_PROP for anything else
+                                market_type = MarketType.GAME_PROP
 
                         if market_type is None:
                             continue
@@ -140,14 +218,16 @@ async def fetch_sport(sport: str) -> List[SportsbookSnapshot]:
                             prices = runner.get("prices", [])
                             handicap = runner.get("handicap")
 
-                            # Get best back price
+                            # Get best back price (Matchbook uses "win" for back in binary markets)
                             best_back = None
                             for price in prices:
                                 side = price.get("side", "")
-                                if side == "back":
+                                # Matchbook uses "win" for back, "lose" for lay in binary exchange markets
+                                if side == "win" or side == "back":
                                     decimal_odds = price.get("decimal-odds", 0)
-                                    if decimal_odds and (best_back is None or decimal_odds > best_back):
-                                        best_back = decimal_odds
+                                    if decimal_odds and decimal_odds > 1.0:
+                                        if best_back is None or decimal_odds > best_back:
+                                            best_back = decimal_odds
 
                             if best_back and best_back > 1.0:
                                 american_odds = _decimal_to_american(best_back)

@@ -1,7 +1,6 @@
 """
-FanDuel Sportsbook Scraper - Comprehensive Market Coverage Upgrade
+FanDuel Sportsbook Scraper
 Directly hits FanDuel's public sportsbook API for odds data.
-Enhanced to capture and properly classify ALL available markets.
 """
 
 import httpx
@@ -41,79 +40,20 @@ SPORT_MAP = {
 
 
 def _classify_market(market_type_raw: str, market_name: str) -> MarketType:
-    """
-    Enhanced market classification for FanDuel.
-    Properly detects player props, team props, game props, and alternate lines.
-    """
+    """Classify FanDuel market type into our standard types."""
     name_lower = market_name.lower()
-    type_lower = market_type_raw.lower() if market_type_raw else ""
-    
-    # Combine market type and name for better classification
-    combined_text = f"{name_lower} {type_lower}"
-    
-    # PLAYER PROPS - Detect player-specific betting markets
-    player_prop_keywords = [
-        # Basketball props
-        'to score', 'to record', 'points', 'rebounds', 'assists', 'threes', 'made threes',
-        'three pointers', 'three point', '3-point', '3 point', 'blocks', 'steals',
-        'turnovers', 'double double', 'triple double', 'points + rebounds', 'points + assists',
-        'rebounds + assists', 'p+r', 'p+a', 'r+a', 'points/rebounds/assists',
-        # Football props
-        'passing yards', 'passing touchdowns', 'rushing yards', 'rushing touchdowns',
-        'receiving yards', 'receiving touchdowns', 'completions', 'interceptions',
-        'sacks', 'tackles', 'tackles + assists', 'first downs', 'touchdowns scored',
-        # Baseball props
-        'total bases', 'hits', 'home runs', 'runs batted in', 'strikeouts',
-        'hits allowed', 'runs allowed', 'innings pitched', 'strikeouts thrown',
-        # Hockey props
-        'goals', 'shots on goal', 'saves', 'first period goal', 'anytime',
-        'last goal', 'goals scored',
-        # Tennis props
-        'aces', 'double faults', 'games won', 'sets won', 'break points',
-        # General player indicators
-        'player', 'performance', 'to make', 'to be', 'to have',
-    ]
-    
-    if any(keyword in combined_text for keyword in player_prop_keywords):
-        return MarketType.PLAYER_PROP
-    
-    # TEAM PROPS - Team-specific performance markets
-    # Map to PLAYER_PROP since they're both prop bets
-    team_prop_keywords = [
-        'team to score', 'team to score first', 'team to score last',
-        'team to score most', 'team total', 'team points',
-        'first basket', 'first field goal', 'first touchdown',
-        'highest scoring quarter', 'highest scoring half',
-        'team with most', 'team leads at', 'race to',
-        'to win by', 'winning margin', 'exact score',
-        'quarter', 'period', 'inning', 'half',
-    ]
-    
-    if any(keyword in combined_text for keyword in team_prop_keywords):
-        return MarketType.PLAYER_PROP  # Map to PLAYER_PROP for now
-    
-    # GAME PROPS - Game-specific markets
-    # Map to OTHER for now
-    game_prop_keywords = [
-        'alternatives', 'alternate', 'both teams score', 'btts',
-        'draw no bet', 'double chance', 'total points', 'total goals',
-        'total runs', 'total score', 'will the game go to',
-        'overtime', 'first to', 'last to', 'special', 'novelty',
-    ]
-    
-    if any(keyword in combined_text for keyword in game_prop_keywords):
-        return MarketType.OTHER  # Map to OTHER for now
-    
-    # CORE MARKETS
+    type_lower = market_type_raw.lower()
+
     if "moneyline" in name_lower or "money line" in name_lower or "match_betting" in type_lower:
         return MarketType.MONEYLINE
     elif "spread" in name_lower or "handicap" in name_lower:
         return MarketType.SPREAD
     elif "total" in name_lower or "over/under" in name_lower or "over_under" in type_lower:
         return MarketType.TOTAL
-    elif "future" in name_lower or "outright" in name_lower or "winner" in name_lower or "championship" in name_lower:
+    elif "player" in name_lower or "prop" in name_lower:
+        return MarketType.PLAYER_PROP
+    elif "winner" in name_lower or "future" in name_lower or "win" in name_lower or "championship" in name_lower:
         return MarketType.FUTURES
-    
     return MarketType.OTHER
 
 
@@ -136,10 +76,7 @@ def _safe_american_odds(raw_value) -> Optional[int]:
 
 
 def _parse_response(data: dict, sport: str, league: str) -> List[Event]:
-    """
-    Parse FanDuel API response into Event models.
-    Captures ALL available markets with enhanced classification.
-    """
+    """Parse FanDuel API response into Event models."""
     attachments = data.get("attachments", {})
     raw_events = attachments.get("events", {})
     raw_markets = attachments.get("markets", {})
@@ -189,13 +126,11 @@ def _parse_response(data: dict, sport: str, league: str) -> List[Event]:
             home_team = ev_name
             away_team = ""
 
-        # Parse ALL markets for this event (no filtering)
+        # Parse markets for this event
         markets = []
         for raw_mkt in event_markets.get(eid, []):
             mkt_name = raw_mkt.get("marketName", "")
             mkt_type_raw = raw_mkt.get("marketType", "")
-            
-            # Use enhanced classification
             market_type = _classify_market(mkt_type_raw, mkt_name)
 
             outcomes = []
@@ -258,10 +193,7 @@ def _parse_response(data: dict, sport: str, league: str) -> List[Event]:
 
 
 async def fetch_sport(sport_slug: str, client: Optional[httpx.AsyncClient] = None) -> List[SportsbookSnapshot]:
-    """
-    Fetch odds for a FanDuel sport page.
-    Captures all available markets with enhanced classification.
-    """
+    """Fetch odds for a FanDuel sport page."""
     close_client = False
     if client is None:
         client = httpx.AsyncClient(headers=HEADERS, timeout=30.0)
@@ -312,14 +244,11 @@ async def fetch_all() -> List[SportsbookSnapshot]:
 async def fetch_nfl(client: Optional[httpx.AsyncClient] = None) -> List[SportsbookSnapshot]:
     return await fetch_sport("nfl", client)
 
-
 async def fetch_nba(client: Optional[httpx.AsyncClient] = None) -> List[SportsbookSnapshot]:
     return await fetch_sport("nba", client)
 
-
 async def fetch_mlb(client: Optional[httpx.AsyncClient] = None) -> List[SportsbookSnapshot]:
     return await fetch_sport("mlb", client)
-
 
 async def fetch_nhl(client: Optional[httpx.AsyncClient] = None) -> List[SportsbookSnapshot]:
     return await fetch_sport("nhl", client)

@@ -1,6 +1,7 @@
 """
 Bovada Sportsbook Scraper
 Directly hits Bovada's public JSON API to pull odds for all sports.
+Updated to capture ALL available markets including player props, alternate lines, game props.
 """
 
 import httpx
@@ -12,34 +13,27 @@ from .models import (
 
 SPORTSBOOK_NAME = "Bovada"
 
-BASE_URL = "https://www.bovada.lv/services/sports/event/v2/events/A/description"
+# Updated to working endpoint pattern
+BASE_URL = "https://www.bovada.lv/services/sports/event/coupon/events/A/description"
 
 HEADERS = {
     "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
     "Accept": "application/json",
 }
 
-# Bovada sport slugs -> our normalized sport/league names
-SPORT_MAP = {
-    "football": {"sport": "Football", "leagues": {
-        "NFL": "NFL", "College Football": "NCAAF", "CFL": "CFL", "UFL": "UFL"
-    }},
-    "basketball": {"sport": "Basketball", "leagues": {
-        "NBA": "NBA", "College Basketball": "NCAAB", "WNBA": "WNBA"
-    }},
-    "baseball": {"sport": "Baseball", "leagues": {
-        "MLB": "MLB", "College Baseball": "College Baseball"
-    }},
-    "hockey": {"sport": "Hockey", "leagues": {
-        "NHL": "NHL"
-    }},
-    "soccer": {"sport": "Soccer", "leagues": {}},
-    "tennis": {"sport": "Tennis", "leagues": {}},
-    "boxing": {"sport": "Boxing", "leagues": {}},
-    "golf": {"sport": "Golf", "leagues": {}},
-    "mma": {"sport": "MMA", "leagues": {
-        "UFC": "UFC", "MMA": "MMA"
-    }},
+# Bovada sport/league slugs -> our normalized sport/league names
+SPORT_LEAGUE_MAP = {
+    "basketball/nba": {"sport": "Basketball", "league": "NBA"},
+    "basketball/wnba": {"sport": "Basketball", "league": "WNBA"},
+    "basketball/ncaa": {"sport": "Basketball", "league": "NCAAB"},
+    "football/nfl": {"sport": "Football", "league": "NFL"},
+    "football/ncaa": {"sport": "Football", "league": "NCAAF"},
+    "football/cfl": {"sport": "Football", "league": "CFL"},
+    "baseball/mlb": {"sport": "Baseball", "league": "MLB"},
+    "hockey/nhl": {"sport": "Hockey", "league": "NHL"},
+    "mma/ufc": {"sport": "MMA", "league": "UFC"},
+    "soccer/epl": {"sport": "Soccer", "league": "EPL"},
+    "soccer/uefa": {"sport": "Soccer", "league": "UEFA"},
 }
 
 
@@ -52,7 +46,9 @@ def _parse_market_type(key: str, description: str) -> MarketType:
         return MarketType.SPREAD
     elif "total" in desc_lower or "over/under" in desc_lower or key == "2W-OU":
         return MarketType.TOTAL
-    elif "prop" in desc_lower or "player" in desc_lower:
+    elif "player" in desc_lower and ("points" in desc_lower or "rebounds" in desc_lower or "assists" in desc_lower):
+        return MarketType.PLAYER_PROP
+    elif "prop" in desc_lower or "milestones" in desc_lower:
         return MarketType.PLAYER_PROP
     elif "future" in desc_lower or "winner" in desc_lower or "outright" in desc_lower:
         return MarketType.FUTURES
@@ -60,7 +56,10 @@ def _parse_market_type(key: str, description: str) -> MarketType:
 
 
 def _parse_event(raw_event: dict, sport: str, league: str) -> Event:
-    """Parse a single Bovada event into our Event model."""
+    """Parse a single Bovada event into our Event model.
+    
+    This function captures ALL available markets, not just main markets.
+    """
     competitors = raw_event.get("competitors", [])
     home_team = ""
     away_team = ""
@@ -74,17 +73,19 @@ def _parse_event(raw_event: dict, sport: str, league: str) -> Event:
     start_time = datetime.fromtimestamp(start_ms / 1000, tz=timezone.utc) if start_ms else None
 
     markets = []
+    
+    # Process ALL display groups (categories of markets)
     for display_group in raw_event.get("displayGroups", []):
+        group_desc = display_group.get("description", "")
+        
+        # Process ALL markets in each display group
         for raw_market in display_group.get("markets", []):
-            period = raw_market.get("period", {})
-            # Only include main period markets by default
-            if not period.get("main", False) and not raw_market.get("description", "").startswith("Total"):
-                # Include main markets + totals even if period isn't flagged main
-                if period.get("main", False) is False and period.get("description", "") != "Game":
-                    continue
-
             market_key = raw_market.get("key", "")
             market_desc = raw_market.get("description", "")
+            
+            # Build full market name including the category for better context
+            full_market_name = f"{group_desc} - {market_desc}" if group_desc else market_desc
+            
             market_type = _parse_market_type(market_key, market_desc)
 
             outcomes = []
@@ -118,7 +119,7 @@ def _parse_event(raw_event: dict, sport: str, league: str) -> Event:
             if outcomes:
                 markets.append(Market(
                     market_type=market_type,
-                    name=market_desc,
+                    name=full_market_name,
                     outcomes=outcomes,
                 ))
 
@@ -135,8 +136,14 @@ def _parse_event(raw_event: dict, sport: str, league: str) -> Event:
     )
 
 
-async def fetch_sport(sport_slug: str, client: Optional[httpx.AsyncClient] = None) -> List[SportsbookSnapshot]:
-    """Fetch all events for a Bovada sport slug (e.g., 'basketball', 'football')."""
+async def fetch_league(sport_league_slug: str, client: Optional[httpx.AsyncClient] = None, pre_match_only: bool = True) -> List[SportsbookSnapshot]:
+    """Fetch all events for a specific Bovada sport/league.
+    
+    Args:
+        sport_league_slug: e.g., 'basketball/nba', 'football/nfl'
+        client: httpx async client
+        pre_match_only: if True, only get pre-match events (not live)
+    """
     close_client = False
     if client is None:
         client = httpx.AsyncClient(headers=HEADERS, timeout=30.0)
@@ -144,41 +151,50 @@ async def fetch_sport(sport_slug: str, client: Optional[httpx.AsyncClient] = Non
 
     snapshots = []
     try:
-        url = f"{BASE_URL}/{sport_slug}"
-        resp = await client.get(url)
+        # Construct URL with working endpoint pattern
+        url = f"{BASE_URL}/{sport_league_slug}"
+        params = {
+            "preMatchOnly": str(pre_match_only).lower(),
+            "lang": "en"
+        }
+        
+        resp = await client.get(url, params=params)
         resp.raise_for_status()
         data = resp.json()
-
-        sport_info = SPORT_MAP.get(sport_slug, {"sport": sport_slug.title(), "leagues": {}})
+        
+        # Get sport/league info
+        sport_info = SPORT_LEAGUE_MAP.get(sport_league_slug, {
+            "sport": sport_league_slug.split("/")[0].title(),
+            "league": sport_league_slug.split("/")[-1].upper()
+        })
+        sport_name = sport_info["sport"]
+        league_name = sport_info["league"]
         now = datetime.now(timezone.utc)
 
+        events = []
+        # data is an array of groups, each with path and events
         for group in data:
-            path = group.get("path", [])
             raw_events = group.get("events", [])
-
-            # Determine league from path
-            league_name = path[0].get("description", "Unknown") if path else "Unknown"
-            sport_name = sport_info["sport"]
-
-            events = []
             for raw_event in raw_events:
                 try:
                     event = _parse_event(raw_event, sport_name, league_name)
                     if event.markets:  # Only include events with odds
                         events.append(event)
-                except Exception:
+                except Exception as e:
+                    print(f"[Bovada] Error parsing event: {e}")
                     continue
 
-            if events:
-                snapshots.append(SportsbookSnapshot(
-                    sportsbook=SPORTSBOOK_NAME,
-                    sport=sport_name,
-                    league=league_name,
-                    fetched_at=now,
-                    events=events,
-                ))
+        if events:
+            snapshots.append(SportsbookSnapshot(
+                sportsbook=SPORTSBOOK_NAME,
+                sport=sport_name,
+                league=league_name,
+                fetched_at=now,
+                events=events,
+            ))
+            
     except Exception as e:
-        print(f"[Bovada] Error fetching {sport_slug}: {e}")
+        print(f"[Bovada] Error fetching {sport_league_slug}: {e}")
     finally:
         if close_client:
             await client.aclose()
@@ -186,24 +202,41 @@ async def fetch_sport(sport_slug: str, client: Optional[httpx.AsyncClient] = Non
     return snapshots
 
 
+# Backward compatibility alias
+async def fetch_sport(sport_league_slug: str, client: Optional[httpx.AsyncClient] = None) -> List[SportsbookSnapshot]:
+    """Backward compatibility function - maps to fetch_league."""
+    return await fetch_league(sport_league_slug, client)
+
+
 async def fetch_all() -> List[SportsbookSnapshot]:
-    """Fetch odds for all supported sports from Bovada."""
+    """Fetch odds for all supported sports/leagues from Bovada."""
     all_snapshots = []
     async with httpx.AsyncClient(headers=HEADERS, timeout=30.0) as client:
-        for sport_slug in SPORT_MAP.keys():
-            snapshots = await fetch_sport(sport_slug, client)
+        # Fetch each sport/league combination
+        for slug in SPORT_LEAGUE_MAP.keys():
+            print(f"[Bovada] Fetching {slug}...")
+            snapshots = await fetch_league(slug, client)
             all_snapshots.extend(snapshots)
+            print(f"[Bovada] Found {len(snapshots)} snapshots for {slug}")
+    
     return all_snapshots
 
 
 async def fetch_nfl(client: Optional[httpx.AsyncClient] = None) -> List[SportsbookSnapshot]:
-    return await fetch_sport("football", client)
+    return await fetch_league("football/nfl", client)
+
 
 async def fetch_nba(client: Optional[httpx.AsyncClient] = None) -> List[SportsbookSnapshot]:
-    return await fetch_sport("basketball", client)
+    return await fetch_league("basketball/nba", client)
+
 
 async def fetch_mlb(client: Optional[httpx.AsyncClient] = None) -> List[SportsbookSnapshot]:
-    return await fetch_sport("baseball", client)
+    return await fetch_league("baseball/mlb", client)
+
 
 async def fetch_nhl(client: Optional[httpx.AsyncClient] = None) -> List[SportsbookSnapshot]:
-    return await fetch_sport("hockey", client)
+    return await fetch_league("hockey/nhl", client)
+
+
+async def fetch_ufc(client: Optional[httpx.AsyncClient] = None) -> List[SportsbookSnapshot]:
+    return await fetch_league("mma/ufc", client)
