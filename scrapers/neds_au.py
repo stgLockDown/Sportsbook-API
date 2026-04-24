@@ -23,7 +23,8 @@ HEADERS = {
 
 async def fetch_sport(sport: str) -> List[SportsbookSnapshot]:
     """Fetch odds for a sport from Neds AU."""
-    async with httpx.AsyncClient(timeout=25) as client:
+    from ._proxy import get_client_kwargs
+    async with httpx.AsyncClient(timeout=25, **get_client_kwargs("AU")) as client:
         try:
             r = await client.get(
                 f"{BASE_URL}/event-request?category_id=6",

@@ -249,7 +249,8 @@ async def fetch_sport(sport: str) -> List[SportsbookSnapshot]:
     all_games: List[dict] = []
     seen_game_ids = set()
 
-    async with httpx.AsyncClient(timeout=20, headers=HEADERS) as client:
+    from ._proxy import get_client_kwargs
+    async with httpx.AsyncClient(timeout=20, headers=HEADERS, **get_client_kwargs("US")) as client:
         for slug in slugs:
             try:
                 url = f"https://api.actionnetwork.com/web/v1/scoreboard/{slug}"

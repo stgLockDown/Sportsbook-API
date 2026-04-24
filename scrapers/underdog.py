@@ -59,7 +59,8 @@ def _american_to_decimal(american: int) -> float:
 
 async def fetch_sport(sport: str) -> List[SportsbookSnapshot]:
     """Fetch player prop lines from Underdog Fantasy."""
-    async with httpx.AsyncClient(timeout=25) as client:
+    from ._proxy import get_client_kwargs
+    async with httpx.AsyncClient(timeout=25, **get_client_kwargs("US")) as client:
         try:
             r = await client.get(BASE_URL, headers=HEADERS)
             r.raise_for_status()

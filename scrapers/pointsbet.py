@@ -175,7 +175,8 @@ async def fetch_sport(sport: str) -> List[SportsbookSnapshot]:
     if comp_id is None:
         return []
 
-    async with httpx.AsyncClient(timeout=20, headers=HEADERS) as client:
+    from ._proxy import get_client_kwargs
+    async with httpx.AsyncClient(timeout=20, headers=HEADERS, **get_client_kwargs("US")) as client:
         # Step 1: Get event list
         try:
             url = f"{BASE_URL}/competitions/{comp_id}/events/featured?includeLive=true"

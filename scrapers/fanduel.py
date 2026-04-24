@@ -264,7 +264,8 @@ async def fetch_sport(sport_slug: str, client: Optional[httpx.AsyncClient] = Non
     """
     close_client = False
     if client is None:
-        client = httpx.AsyncClient(headers=HEADERS, timeout=30.0)
+        from ._proxy import get_client_kwargs
+        client = httpx.AsyncClient(headers=HEADERS, timeout=30.0, **get_client_kwargs("US"))
         close_client = True
 
     snapshots = []
@@ -302,7 +303,8 @@ async def fetch_sport(sport_slug: str, client: Optional[httpx.AsyncClient] = Non
 async def fetch_all() -> List[SportsbookSnapshot]:
     """Fetch odds for all supported sports from FanDuel."""
     all_snapshots = []
-    async with httpx.AsyncClient(headers=HEADERS, timeout=30.0) as client:
+    from ._proxy import get_client_kwargs
+    async with httpx.AsyncClient(headers=HEADERS, timeout=30.0, **get_client_kwargs("US")) as client:
         for sport_slug in SPORT_MAP.keys():
             snapshots = await fetch_sport(sport_slug, client)
             all_snapshots.extend(snapshots)

@@ -227,7 +227,8 @@ async def fetch_sport(our_sport_key: str, client: Optional[httpx.AsyncClient] = 
     """Fetch odds for a specific sport from BetRivers."""
     close_client = False
     if client is None:
-        client = httpx.AsyncClient(headers=HEADERS, timeout=30.0)
+        from ._proxy import get_client_kwargs
+        client = httpx.AsyncClient(headers=HEADERS, timeout=30.0, **get_client_kwargs("US"))
         close_client = True
 
     snapshots = []
@@ -287,7 +288,8 @@ async def fetch_sport(our_sport_key: str, client: Optional[httpx.AsyncClient] = 
 async def fetch_all() -> List[SportsbookSnapshot]:
     """Fetch odds for all sports from BetRivers."""
     snapshots = []
-    async with httpx.AsyncClient(headers=HEADERS, timeout=30.0) as client:
+    from ._proxy import get_client_kwargs
+    async with httpx.AsyncClient(headers=HEADERS, timeout=30.0, **get_client_kwargs("US")) as client:
         # Fetch all events once
         all_items = await _fetch_all_events(client, "prematch")
         live_items = await _fetch_all_events(client, "live")

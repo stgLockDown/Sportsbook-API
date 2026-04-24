@@ -400,13 +400,94 @@ async def clear_cache():
 
 @app.get("/health")
 async def health():
+    from scrapers._proxy import proxy_status
     return {
         "status": "healthy",
-        "version": "10.0.0",
+        "version": "11.0.0",
         "sportsbooks": ALL_SPORTSBOOKS,
         "sportsbook_count": len(ALL_SPORTSBOOKS),
         "sport_count": len(get_available_sports()),
         "cache": cache.stats(),
+        "proxy_config": proxy_status(),
+    }
+
+
+@app.get("/status/books")
+async def books_status():
+    """
+    Lists every configured bookmaker with its region, technology stack,
+    and whether a proxy is configured for its region.
+    Useful for diagnosing which books are reachable from current deployment.
+    """
+    from scrapers._proxy import proxy_status, is_us_proxy_configured
+    from scrapers import kambi_factory, balkan_factory, onexbet_factory
+
+    ps = proxy_status()
+
+    books = []
+    # Direct scrapers
+    direct_books = [
+        ("Bovada", "US/Global", "proprietary", ps["US"] or True),  # Bovada is offshore, works anywhere
+        ("FanDuel", "US", "proprietary", ps["US"]),
+        ("DraftKings", "US", "proprietary (Akamai)", ps["US"]),
+        ("BetRivers", "US", "kambi-us", ps["US"]),
+        ("ESPN/DraftKings", "US", "espn-meta", True),
+        ("Pinnacle", "Global", "pinnacle-api", True),
+        ("Pinnacle v3", "Global", "pinnacle-api-v3", True),
+        ("Pinnacle (Guest)", "Global", "pinnacle-guest", True),
+        ("Kambi/Unibet", "EU/Global", "kambi", True),
+        ("Smarkets", "UK", "smarkets-api", True),
+        ("Matchbook", "UK", "matchbook-api", True),
+        ("Ladbrokes AU", "AU", "entain-au", ps["AU"]),
+        ("Neds AU", "AU", "entain-au", ps["AU"]),
+        ("Underdog Fantasy", "US", "underdog-api", ps["US"]),
+        ("ActionNetwork", "US", "an-meta", True),
+        ("22Bet", "Global", "onexbet-family", True),
+        ("PointsBet", "AU/Canada", "pointsbet-api", ps["AU"]),
+        ("Unibet (Detail)", "EU", "kambi-detail", True),
+        ("PAF (Detail)", "EU", "kambi-detail", True),
+        ("Coolbet", "EU/LatAm", "kambi", True),
+        ("ComeOn", "EU", "kambi", True),
+        ("Leon.bet", "Global", "leon-api", True),
+        ("MaxBet", "Balkan", "balkan-api", True),
+        ("Kalshi", "US (CFTC)", "kalshi-api", True),
+        ("Polymarket", "Crypto/Global", "polymarket-api", True),
+    ]
+    for name, region, stack, reachable in direct_books:
+        books.append({
+            "name": name, "region": region, "stack": stack,
+            "reachable_from_current_deployment": bool(reachable),
+        })
+
+    # Kambi factory operators (all 25)
+    for op_id, op in kambi_factory.KAMBI_OPERATORS.items():
+        books.append({
+            "name": op["name"], "region": op.get("market", "?"),
+            "stack": "kambi-factory",
+            "reachable_from_current_deployment": True,
+        })
+
+    # Balkan factory operators
+    for op_id, op in balkan_factory.BALKAN_OPERATORS.items():
+        books.append({
+            "name": op["name"], "region": "Balkans",
+            "stack": "balkan-factory",
+            "reachable_from_current_deployment": True,
+        })
+
+    # 1xBet factory operators
+    for op_id, op in onexbet_factory.ONEXBET_OPERATORS.items():
+        books.append({
+            "name": op["name"], "region": op.get("region", "Global"),
+            "stack": "onexbet-family",
+            "reachable_from_current_deployment": True,
+        })
+
+    return {
+        "total_books": len(books),
+        "us_proxy_configured": is_us_proxy_configured(),
+        "proxy_regions": ps,
+        "books": books,
     }
 
 

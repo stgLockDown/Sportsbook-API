@@ -179,7 +179,8 @@ async def _fetch_league_events(sport_path: str, league_path: str, league_name: s
 
     events = []
     try:
-        async with httpx.AsyncClient(timeout=30, headers=HEADERS) as client:
+        from ._proxy import get_client_kwargs
+        async with httpx.AsyncClient(timeout=30, headers=HEADERS, **get_client_kwargs("US")) as client:
             resp = await client.get(url, params=params)
             if resp.status_code != 200:
                 logger.warning(f"ESPN {league_name}: HTTP {resp.status_code}")

@@ -146,7 +146,8 @@ async def fetch_league(sport_league_slug: str, client: Optional[httpx.AsyncClien
     """
     close_client = False
     if client is None:
-        client = httpx.AsyncClient(headers=HEADERS, timeout=30.0)
+        from ._proxy import get_client_kwargs
+        client = httpx.AsyncClient(headers=HEADERS, timeout=30.0, **get_client_kwargs("US"))
         close_client = True
 
     snapshots = []
@@ -211,7 +212,8 @@ async def fetch_sport(sport_league_slug: str, client: Optional[httpx.AsyncClient
 async def fetch_all() -> List[SportsbookSnapshot]:
     """Fetch odds for all supported sports/leagues from Bovada."""
     all_snapshots = []
-    async with httpx.AsyncClient(headers=HEADERS, timeout=30.0) as client:
+    from ._proxy import get_client_kwargs
+    async with httpx.AsyncClient(headers=HEADERS, timeout=30.0, **get_client_kwargs("US")) as client:
         # Fetch each sport/league combination
         for slug in SPORT_LEAGUE_MAP.keys():
             print(f"[Bovada] Fetching {slug}...")

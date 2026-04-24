@@ -221,7 +221,8 @@ async def fetch_sport(sport: str) -> List[SportsbookSnapshot]:
     if not group_id:
         return []
 
-    async with httpx.AsyncClient(timeout=30, follow_redirects=True) as client:
+    from ._proxy import get_client_kwargs
+    async with httpx.AsyncClient(timeout=30, follow_redirects=True, **get_client_kwargs("US")) as client:
         # Try eventgroup endpoint first
         data = await _try_fetch_eventgroup(client, group_id)
         

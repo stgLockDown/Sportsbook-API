@@ -567,6 +567,12 @@ ALL_SPORTSBOOKS = [
     "SoccerBet BA", "BetOle BA",
     # v11 additions — 1xBet Family (7)
     "1xBet", "BetWinner", "Melbet", "1xBit", "Linebet", "MegaPari", "22Bet (Direct)",
+    # v12 additions — Kambi expansion (9 new)
+    "Unibet AU", "Unibet FI", "888sport UK", "BetRivers NY", "Rush Street",
+    "Holland Casino", "Mr Green (SE)",
+    "La Française des Jeux", "Napoleon Games",
+    # v12 additions — Prediction Markets (2)
+    "Kalshi", "Polymarket",
 ]
 
 SPORTSBOOK_INFO = [
