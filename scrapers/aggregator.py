@@ -35,6 +35,7 @@ from . import pinnacle_v3, unibet, paf
 from . import coolbet, leon, pinnacle_guest
 from . import comeon
 from . import maxbet, kambi_factory, balkan_factory, onexbet_factory
+from . import kalshi, polymarket
 
 
 # ─── Cache ────────────────────────────────────────────────────────────
@@ -101,6 +102,10 @@ SPORT_SLUGS = {
         "betole_ba": "basketball_nba",
         "balkan_factory": "basketball_nba",
         "kambi_factory": "basketball_nba",
+        "kalshi": "basketball_nba",
+        "polymarket": "basketball_nba",
+        "kalshi": "basketball_nba",
+        "polymarket": "basketball_nba",
         "onexbet": "basketball",
     },
     "nfl": {
@@ -123,6 +128,10 @@ SPORT_SLUGS = {
         "betole_ba": "football_nfl",
         "balkan_factory": "football_nfl",
         "kambi_factory": "football_nfl",
+        "kalshi": "football_nfl",
+        "polymarket": "football_nfl",
+        "kalshi": "football_nfl",
+        "polymarket": "football_nfl",
     },
     "mlb": {
         "sport": "Baseball", "league": "MLB",
@@ -144,6 +153,10 @@ SPORT_SLUGS = {
         "betole_ba": "baseball_mlb",
         "balkan_factory": "baseball_mlb",
         "kambi_factory": "baseball_mlb",
+        "kalshi": "baseball_mlb",
+        "polymarket": "baseball_mlb",
+        "kalshi": "baseball_mlb",
+        "polymarket": "baseball_mlb",
         "onexbet": "baseball",
     },
     "nhl": {
@@ -166,6 +179,10 @@ SPORT_SLUGS = {
         "betole_ba": "ice_hockey_nhl",
         "balkan_factory": "ice_hockey_nhl",
         "kambi_factory": "ice_hockey_nhl",
+        "kalshi": "ice_hockey_nhl",
+        "polymarket": "ice_hockey_nhl",
+        "kalshi": "ice_hockey_nhl",
+        "polymarket": "ice_hockey_nhl",
         "onexbet": "ice-hockey",
     },
     "ncaaf": {
@@ -185,6 +202,10 @@ SPORT_SLUGS = {
         "betole_ba": "football_ncaaf",
         "balkan_factory": "football_ncaaf",
         "kambi_factory": "football_ncaaf",
+        "kalshi": "football_ncaaf",
+        "polymarket": "football_ncaaf",
+        "kalshi": "football_ncaaf",
+        "polymarket": "football_ncaaf",
     },
     "ncaab": {
         "sport": "Basketball", "league": "NCAAB",
@@ -205,6 +226,10 @@ SPORT_SLUGS = {
         "betole_ba": "basketball_ncaab",
         "balkan_factory": "basketball_ncaab",
         "kambi_factory": "basketball_ncaab",
+        "kalshi": "basketball_ncaab",
+        "polymarket": "basketball_ncaab",
+        "kalshi": "basketball_ncaab",
+        "polymarket": "basketball_ncaab",
         "onexbet": "basketball",
     },
     "soccer": {
@@ -227,6 +252,8 @@ SPORT_SLUGS = {
         "betole_ba": "soccer",
         "balkan_factory": "soccer",
         "kambi_factory": "soccer",
+        "kalshi": "soccer",
+        "polymarket": "soccer",
         "onexbet": "soccer",
     },
     "mma": {
@@ -248,6 +275,8 @@ SPORT_SLUGS = {
         "betole_ba": "mma",
         "balkan_factory": "mma",
         "kambi_factory": "mma",
+        "kalshi": "mma",
+        "polymarket": "mma",
         "onexbet": "mma",
     },
     "boxing": {
@@ -266,6 +295,8 @@ SPORT_SLUGS = {
         "betole_ba": "boxing",
         "balkan_factory": "boxing",
         "kambi_factory": "boxing",
+        "kalshi": "boxing",
+        "polymarket": "boxing",
         "onexbet": "mma",
     },
     "tennis": {
@@ -287,6 +318,10 @@ SPORT_SLUGS = {
         "betole_ba": "tennis",
         "balkan_factory": "tennis",
         "kambi_factory": "tennis",
+        "kalshi": "tennis",
+        "polymarket": "tennis",
+        "kalshi": "tennis",
+        "polymarket": "tennis",
         "onexbet": "tennis",
     },
     "golf": {
@@ -305,6 +340,10 @@ SPORT_SLUGS = {
         "betole_ba": "golf",
         "balkan_factory": "golf",
         "kambi_factory": "golf",
+        "kalshi": "golf",
+        "polymarket": "golf",
+        "kalshi": "golf",
+        "polymarket": "golf",
     },
     "cricket": {
         "sport": "Cricket", "league": "Cricket",
@@ -320,6 +359,8 @@ SPORT_SLUGS = {
         "betole_ba": "cricket",
         "balkan_factory": "cricket",
         "kambi_factory": "cricket",
+        "kalshi": "cricket",
+        "polymarket": "cricket",
     },
     "rugby": {
         "sport": "Rugby", "league": "Rugby Union",
@@ -335,6 +376,8 @@ SPORT_SLUGS = {
         "betole_ba": "rugby_union",
         "balkan_factory": "rugby_union",
         "kambi_factory": "rugby_union",
+        "kalshi": "rugby",
+        "polymarket": "rugby",
     },
     "darts": {
         "sport": "Darts", "league": "Darts",
@@ -787,6 +830,16 @@ async def fetch_sport_all_books(sport_key: str) -> List[SportsbookSnapshot]:
     if pg_sport:
         tasks.append(_fetch_book("Pinnacle (Guest)", pinnacle_guest.fetch_sport(pg_sport)))
 
+    # ── Kalshi (Prediction Market, CFTC-regulated) ──
+    kalshi_sport = slug_info.get("kalshi")
+    if kalshi_sport:
+        tasks.append(_fetch_book("Kalshi", kalshi.fetch_sport(kalshi_sport)))
+
+    # ── Polymarket (Crypto Prediction Market) ──
+    poly_sport = slug_info.get("polymarket")
+    if poly_sport:
+        tasks.append(_fetch_book("Polymarket", polymarket.fetch_sport(poly_sport)))
+
     # Execute all concurrently
     results = await asyncio.gather(*tasks, return_exceptions=True)
 
@@ -1098,6 +1151,14 @@ async def fetch_single_book(sport_key: str, sportsbook: str) -> List[SportsbookS
                 snap = await onexbet_factory.fetch_onexbet("22bet_direct", sport)
                 if snap:
                     snapshots = [snap]
+        elif sb == "kalshi":
+            sport = slug_info.get("kalshi")
+            if sport:
+                snapshots = await kalshi.fetch_sport(sport)
+        elif sb == "polymarket":
+            sport = slug_info.get("polymarket")
+            if sport:
+                snapshots = await polymarket.fetch_sport(sport)
 
     except Exception as e:
         print(f"[Aggregator] Error from {sportsbook}: {e}")

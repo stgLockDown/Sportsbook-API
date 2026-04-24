@@ -73,21 +73,90 @@ def _decimal_to_american(decimal_odds: float) -> Optional[int]:
 
 
 def _classify_market(market_name: str) -> MarketType:
-    """Classify market type from market name."""
+    """Classify market type from market name with comprehensive prop detection."""
     name_lower = market_name.lower()
+    
+    # Player prop keywords (comprehensive list)
+    player_prop_keywords = [
+        'player', 'scorer', 'points', 'rebounds', 'assists', 'steals', 'blocks',
+        ' touchdowns', ' receptions', ' rushing yards', ' passing yards',
+        ' double double', 'triple double', 'points + rebounds', 'points + assists',
+        'rebounds + assists', 'pointers made', 'goals', 'assists.', 'points.',
+        'anytime scorer', 'first scorer', 'last scorer', 'to score',
+        'points over', 'points under', 'rebounds over', 'rebounds under',
+        'assists over', 'assists under', 'threes made', 'pims', 'hits',
+        'saves', 'goals scored', 'points scored', 'total points', 'total rebounds',
+        'total assists', 'total strikeouts', 'total hits', 'total home runs',
+        'total bases', 'running yards', 'passing touchdowns', 'rushing touchdowns',
+        'interceptions', 'tackles', 'sacks', 'completions', 'field goals made',
+        'free throws made', 'points, rebounds and assists', 'points and rebounds',
+        'points and assists', 'rebounds and assists', 'most rushing yards',
+        'most receiving yards', 'most passing yards', 'most touchdowns',
+        'most points scored', 'first basket', 'last basket', 'total basket assists',
+        'total 3-pointers made', 'most 3-pointers made'
+    ]
+    
+    # Team prop keywords
+    team_prop_keywords = [
+        'team total', 'team over', 'team under', 'race to', 'first to',
+        'team to score', 'team points', 'team goals', 'team runs',
+        'winning margin', 'highest scoring quarter', 'highest scoring half',
+        'team to score first', 'team to score last', 'total team points',
+        'total team goals', 'total team runs', 'clean sheet',
+        'team to win both halves', 'win both halves', 'team to win either half',
+        'team to score 2+ goals', 'team to score 3+ goals',
+    ]
+    
+    # Game prop keywords
+    game_prop_keywords = [
+        'both teams to score', 'btts', 'draw no bet', 'double chance',
+        'win to nil', 'exact score', 'correct score', 'first half result',
+        'second half result', 'highest scoring', 'odd/even',
+        'total goals', 'total points', 'total runs', 'total touchdowns',
+        'first quarter winner', 'second quarter winner', 'third quarter winner',
+        'fourth quarter winner', 'first half winner', 'second half winner',
+        'overtime', 'period', 'set winner', 'game winner',
+    ]
+    
+    # Moneyline
     if name_lower in ("head to head", "match result", "moneyline", "money line",
                        "match winner", "to win", "match betting"):
         return MarketType.MONEYLINE
-    elif "spread" in name_lower or "handicap" in name_lower or "line" in name_lower:
+    
+    # Spread/Handicap
+    if "spread" in name_lower or "handicap" in name_lower or "line" in name_lower:
         return MarketType.SPREAD
-    elif "total" in name_lower or "over/under" in name_lower or "over under" in name_lower:
+    
+    # Total
+    if "total" in name_lower or "over/under" in name_lower or "over under" in name_lower:
+        # Check if it's a team total (team prop)
+        if ("team" in name_lower and ("over" in name_lower or "under" in name_lower)):
+            return MarketType.TEAM_PROP
         return MarketType.TOTAL
-    elif "player" in name_lower or "scorer" in name_lower or "points" in name_lower:
-        return MarketType.PLAYER_PROP
-    elif "winner" in name_lower and ("season" in name_lower or "premiership" in name_lower or "championship" in name_lower):
+    
+    # Player props
+    for keyword in player_prop_keywords:
+        if keyword in name_lower:
+            return MarketType.PLAYER_PROP
+    
+    # Team props
+    for keyword in team_prop_keywords:
+        if keyword in name_lower:
+            return MarketType.TEAM_PROP
+    
+    # Game props
+    for keyword in game_prop_keywords:
+        if keyword in name_lower:
+            return MarketType.GAME_PROP
+    
+    # Futures
+    if "winner" in name_lower and ("season" in name_lower or "premiership" in name_lower or 
+                                    "championship" in name_lower or "outright" in name_lower or 
+                                    "trophy" in name_lower or " Premiership" in name_lower or 
+                                    "grand final" in name_lower):
         return MarketType.FUTURES
-    else:
-        return MarketType.OTHER
+    
+    return MarketType.OTHER
 
 
 def _match_sport(competition_name: str, sport_key: str) -> bool:

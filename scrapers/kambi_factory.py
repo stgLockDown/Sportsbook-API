@@ -28,16 +28,38 @@ HEADERS = {
     "Accept": "application/json",
 }
 
-# All Kambi operators we've confirmed working
+# All Kambi operators we've confirmed working (expanded 2024/2025)
 KAMBI_OPERATORS = {
+    # Unibet brands
+    "unibet_uk": {"key": "ub", "name": "Unibet UK", "market": "GB"},
     "unibet_be": {"key": "ubbe", "name": "Unibet BE", "market": "BE"},
     "unibet_ro": {"key": "ubro", "name": "Unibet RO", "market": "RO"},
     "unibet_de": {"key": "ubde", "name": "Unibet DE", "market": "DE"},
     "unibet_dk": {"key": "ubdk", "name": "Unibet DK", "market": "DK"},
     "unibet_ca": {"key": "ubca", "name": "Unibet CA", "market": "CA"},
+    "unibet_nl": {"key": "ubnl", "name": "Unibet NL", "market": "NL"},
+    "unibet_au": {"key": "ubau", "name": "Unibet AU", "market": "AU"},
+    "unibet_fi": {"key": "ubfi", "name": "Unibet FI", "market": "FI"},
+    "unibet_se": {"key": "ubse", "name": "Unibet SE", "market": "SE"},
+    # 888 brands
     "888sport_it": {"key": "888it", "name": "888sport IT", "market": "IT"},
+    "888sport_uk": {"key": "888", "name": "888sport UK", "market": "GB"},
+    # BetRivers / Rush Street
+    "betrivers_ny": {"key": "rsinj", "name": "BetRivers NY", "market": "US"},
+    "rsi": {"key": "rsi", "name": "Rush Street", "market": "US"},
+    # Belgium
     "bingoal": {"key": "bingoalbe", "name": "Bingoal", "market": "BE"},
+    "napoleon": {"key": "napoleongamesbe", "name": "Napoleon Games", "market": "BE"},
+    # Netherlands
     "betcity": {"key": "betcitynl", "name": "BetCity NL", "market": "NL"},
+    "hollandcasino": {"key": "hcnl", "name": "Holland Casino", "market": "NL"},
+    # Scandinavian
+    "atg_se": {"key": "atg", "name": "ATG (SE)", "market": "SE"},
+    "svenska_spel": {"key": "svse", "name": "Svenska Spel", "market": "SE"},
+    "mrgreen_se": {"key": "mrg", "name": "Mr Green (SE)", "market": "SE"},
+    "paf": {"key": "paf", "name": "Paf", "market": "FI"},
+    # French
+    "lfdj": {"key": "lfdj", "name": "La Française des Jeux", "market": "FR"},
 }
 
 # Sport path mappings (same as coolbet/comeon)
