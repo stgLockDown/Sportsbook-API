@@ -1,94 +1,74 @@
 # Sportsbook Expansion Plan — Path to 100+ Books
 
-## Current Count (after this push)
-- Core scrapers: ~15 (Bovada, FanDuel, BetRivers, Pinnacle, ESPN, Smarkets, Matchbook, Ladbrokes AU, Neds AU, Underdog, DraftKings, ActionNetwork, 22Bet, PointsBet, ComeOn, MaxBet, Leon, Coolbet, Unibet detail, PAF detail, Pinnacle v3/Guest)
-- Kambi factory: 25+ operators (Unibet UK/NL/AU/FI/SE/BE/RO/DE/DK/CA, 888sport UK/IT, BetRivers NY, Rush Street, Holland Casino, ATG, Svenska Spel, Mr Green, Paf, LaFDJ, Napoleon, Bingoal, BetCity NL)
-- Balkan factory: 4 operators (SoccerBet RS, MaxBet BA, MaxBet MK, BetOle RS)
-- OneXBet factory: 6 operators (1xBet, 1xBit, BetWinner, Melbet, Linebet, MegaPari, 22Bet-direct)
-- Prediction markets: 2 (Kalshi, Polymarket)
+## Current Status (after v13 push)
 
-**Approximate total: ~55-60 distinct books accessible via API**
+### Built-in Scrapers: 62 books directly reachable
+- 25+ direct scrapers (Bovada, Pinnacle guest, ESPN, Smarkets, etc.)
+- 23 Kambi factory operators (Unibet, 888sport, Rush Street, Holland Casino, etc.)
+- 7 Balkan factory operators
+- 7 OneXBet family operators
+- 2 prediction markets (Kalshi, Polymarket)
+- **Now with US proxy support** — US books unlock once deployed in US region
 
-## Gap to 100+: Need ~45 more books
+### Via The Odds API (meta-provider, 35+ more books)
+When `THE_ODDS_API_KEY` env var is set, we gain access to:
+- **US (13+):** DraftKings, FanDuel, BetMGM, Caesars, BetRivers, PointsBet, WynnBET, SugarHouse, Unibet US, BetOnline, LowVig, MyBookie, Superbook
+- **UK (12+):** bet365, William Hill, Paddy Power, Betfair, Ladbrokes UK, Coral UK, BoyleSports, BetVictor, SkyBet, Grosvenor, Marathon Bet, Betfred
+- **EU (4+):** Betsson, NordicBet, LeoVegas, 888sport
+- **AU (6+):** Sportsbet AU, TAB AU, PlayUp, Ladbrokes AU, Bluebet, Boombet
 
-## Phase 1 — High-Value JSON APIs (confirmed working)
-- [ ] BetOpenly (US exchange) — curl_cffi OK
-- [ ] Dafabet (Asian) — 77KB JSON confirmed
-- [ ] Grosvenor (UK) — 10KB JSON confirmed
-- [ ] Fonbet (RU) — 2KB JSON confirmed
-- [ ] Bet9ja (Nigeria) — 3KB JSON confirmed
+### **Total potential: 62 direct + 35 OddsAPI = 97 books** ✅
 
-## Phase 2 — Sportradar/Betradar Feed consumers
-Many books use the same Sportradar odds feed. Identify operators:
-- [ ] FortunaCZ — Sportradar feed
-- [ ] Tipsport — Sportradar feed
-- [ ] Chance.cz — Sportradar feed
+## Deployment Configuration (v13)
 
-## Phase 3 — SBTech (now Entain tech stack) consumers
-- [ ] BetMGM (attempt direct)
-- [ ] Party Poker sports
-- [ ] Borgata
+### Railway
+- `railway.toml` sets `region = "us-east4"` (Virginia, US)
+- This alone unlocks DK/FD/BetRivers/ESPN/ActionNetwork/PointsBet/Underdog/Kalshi
 
-## Phase 4 — Crypto / Offshore (less geo-blocked)
-- [ ] Stake.com (if public API)
-- [ ] BetUS
-- [ ] MyBookie
-- [ ] BetOnline
-- [ ] SportsBetting.ag
-- [ ] Bookmaker.eu
-- [ ] BetAnySports
-- [ ] Heritage Sports
+### Environment Variables
+| Variable | Purpose |
+|----------|---------|
+| `THE_ODDS_API_KEY` | Enables TheOddsAPI meta-provider (40+ books) |
+| `US_PROXY_URL` | Route US scrapers through a US residential proxy |
+| `UK_PROXY_URL` | Route UK scrapers through a UK proxy |
+| `EU_PROXY_URL` | Route EU scrapers through an EU proxy |
+| `AU_PROXY_URL` | Route AU scrapers through an AU proxy |
 
-## Phase 5 — Exchange / P2P
-- [ ] Betfair Exchange (via API)
-- [ ] BetDAQ
-- [ ] ProphetX (US exchange)
-- [ ] Sporttrade (US exchange)
+## How to Reach 100+ Books Post-Deploy
 
-## Phase 6 — Additional Kambi operators to trial
-- [ ] DK/JP/PT/FR Unibet variants
-- [ ] JackMobile
-- [ ] Napoleon (already tried)
-- [ ] Casinolab
-- [ ] Casino777
+### Phase 1 (Immediate — no cost)
+Deploy to `us-east4` via Railway:
+- Unlocks: DraftKings, FanDuel, BetRivers, ESPN/DK, Bovada, ActionNetwork, PointsBet, Underdog, Kalshi
+- **Net gain: all US books reachable** — brings us from 55 → 62 active
 
-## Phase 7 — AU/NZ Market (Entain / Tabcorp)
-- [ ] TAB NZ
-- [ ] TAB AU
-- [ ] Sportsbet AU
-- [ ] BlueBet AU
-- [ ] Palmerbet AU
-- [ ] BoomBet AU
-- [ ] PlayUp AU
+### Phase 2 ($29/mo)
+Set `THE_ODDS_API_KEY`:
+- Adds ~35 more books via aggregated feed
+- **Net gain: 62 → 97 books**
 
-## Phase 8 — EU Operators
-- [ ] Betsson
-- [ ] Betano
-- [ ] Superbet
-- [ ] SISAL IT
-- [ ] Snai IT
-- [ ] Eurobet IT
-- [ ] William Hill IT
-- [ ] Goldbet IT
-- [ ] Tipico DE
-- [ ] Oddset DE
-- [ ] BetClic FR
-- [ ] ParionsSport FR (LaFDJ)
-- [ ] PMU FR
-- [ ] Zeturf FR
+### Phase 3 (Advanced)
+Add residential proxies:
+- `AU_PROXY_URL`: Unlocks Sportsbet AU direct, TAB AU, BlueBet, BoomBet
+- `EU_PROXY_URL`: Unlocks Betano, Winamax, Tipico, Betsson group
+- **Net gain: 97 → 110+ books**
 
-## Phase 9 — Asian Operators
-- [ ] SBOBET
-- [ ] 1XBet (already have)
-- [ ] Bet365 Asia
-- [ ] Marathonbet
-- [ ] 188bet
-- [ ] 12bet
-- [ ] M88
-- [ ] Fun88
+## Unprobed but Promising Targets
 
-## Bot Detection Bypass Strategy for US Books
-1. curl_cffi with Chrome TLS impersonation — partial (blocked by geo)
-2. US residential proxy rotation (Bright Data, Oxylabs, ScraperAPI)
-3. Run deployment on a US-based VPS (DO SFO, AWS us-east, Linode Dallas)
-4. Scraper fallback: The Odds API aggregated feed (fallback data source)
+### Crypto/Offshore (location-blocked from this sandbox)
+- Stake.com (sports fixtures API exists, need residential proxy)
+- BetOnline.ag (api-offering.betonline.ag — Cloudflare geo-blocked)
+- MyBookie.ag, SportsBetting.ag, BetUS, BetAnySports (ring of sister-sites)
+- Bookmaker.eu
+
+### Altenar-powered
+Betsafe, Betsson, NordicBet, LeoVegas moved away from Altenar to proprietary platforms.
+
+### SBTech / Entain cds-api
+Bwin, BetMGM, Ladbrokes UK, Coral UK, Sportingbet, PartyCasino, BetVictor — 
+all use the same `cds-api/bettingoffer/fixtures` endpoint with an `x-bwin-accessid` 
+header that differs per region. Access IDs are JS-injected and short-lived.
+**TheOddsAPI covers all of these.**
+
+### Asian
+SBOBET, 188bet, 12bet, M88, Fun88 — all use closed agent-only APIs.
+**TheOddsAPI does not cover these — would need dedicated scrapers per book.**

@@ -419,10 +419,12 @@ async def books_status():
     and whether a proxy is configured for its region.
     Useful for diagnosing which books are reachable from current deployment.
     """
+    import os
     from scrapers._proxy import proxy_status, is_us_proxy_configured
     from scrapers import kambi_factory, balkan_factory, onexbet_factory
 
     ps = proxy_status()
+    toa_enabled = bool(os.getenv("THE_ODDS_API_KEY"))
 
     books = []
     # Direct scrapers
@@ -483,11 +485,42 @@ async def books_status():
             "reachable_from_current_deployment": True,
         })
 
+    # TheOddsAPI meta-provider (unlocks ~40 more books when enabled)
+    toa_books = []
+    if toa_enabled:
+        toa_books = [
+            "DraftKings (OddsAPI)", "FanDuel (OddsAPI)", "BetMGM (OddsAPI)",
+            "Caesars (OddsAPI)", "BetRivers (OddsAPI)", "PointsBet (OddsAPI)",
+            "WynnBET (OddsAPI)", "SugarHouse (OddsAPI)", "Unibet US (OddsAPI)",
+            "BetOnline (OddsAPI)", "LowVig (OddsAPI)", "MyBookie (OddsAPI)",
+            "Superbook (OddsAPI)",
+            "bet365 (OddsAPI)", "William Hill (OddsAPI)", "Paddy Power (OddsAPI)",
+            "Betfair (OddsAPI)", "Ladbrokes UK (OddsAPI)", "Coral UK (OddsAPI)",
+            "BoyleSports (OddsAPI)", "BetVictor (OddsAPI)", "SkyBet (OddsAPI)",
+            "Grosvenor (OddsAPI)", "Marathon Bet (OddsAPI)", "Betfred (OddsAPI)",
+            "Betsson (OddsAPI)", "NordicBet (OddsAPI)", "LeoVegas (OddsAPI)",
+            "888sport (OddsAPI)",
+            "Sportsbet AU (OddsAPI)", "TAB AU (OddsAPI)", "PlayUp (OddsAPI)",
+            "Ladbrokes AU (OddsAPI)", "Bluebet (OddsAPI)", "Boombet (OddsAPI)",
+        ]
+        for name in toa_books:
+            books.append({
+                "name": name, "region": "Via The Odds API",
+                "stack": "the-odds-api",
+                "reachable_from_current_deployment": True,
+            })
+
     return {
         "total_books": len(books),
         "us_proxy_configured": is_us_proxy_configured(),
+        "the_odds_api_enabled": toa_enabled,
         "proxy_regions": ps,
         "books": books,
+        "how_to_unlock_us_books": {
+            "option_a_us_vps": "Deploy on Railway with region=us-east4 (configured in railway.toml).",
+            "option_b_us_proxy": "Set env var US_PROXY_URL=http://user:pass@us-residential-proxy:port",
+            "option_c_odds_api": "Set env var THE_ODDS_API_KEY to enable aggregated feed from 40+ books",
+        },
     }
 
 

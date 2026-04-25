@@ -35,7 +35,7 @@ from . import pinnacle_v3, unibet, paf
 from . import coolbet, leon, pinnacle_guest
 from . import comeon
 from . import maxbet, kambi_factory, balkan_factory, onexbet_factory
-from . import kalshi, polymarket
+from . import kalshi, polymarket, the_odds_api
 
 
 # ─── Cache ────────────────────────────────────────────────────────────
@@ -845,6 +845,19 @@ async def fetch_sport_all_books(sport_key: str) -> List[SportsbookSnapshot]:
     poly_sport = slug_info.get("polymarket")
     if poly_sport:
         tasks.append(_fetch_book("Polymarket", polymarket.fetch_sport(poly_sport)))
+
+    # ── The Odds API (Meta-provider: 40+ books via commercial aggregator) ──
+    # Only runs when THE_ODDS_API_KEY env var is set
+    import os
+    if os.getenv("THE_ODDS_API_KEY"):
+        toa_snaps_task = the_odds_api.fetch_sport(sport_key)
+        async def _wrap_toa():
+            try:
+                snaps = await toa_snaps_task
+                return ("TheOddsAPI", snaps) if snaps else ("TheOddsAPI", [])
+            except Exception as e:
+                return ("TheOddsAPI", [])
+        tasks.append(_wrap_toa())
 
     # Execute all concurrently
     results = await asyncio.gather(*tasks, return_exceptions=True)
