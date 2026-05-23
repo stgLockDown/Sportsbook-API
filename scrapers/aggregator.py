@@ -243,7 +243,7 @@ SPORT_SLUGS = {
     },
     "soccer": {
         "sport": "Soccer", "league": "Soccer",
-        "bovada": "soccer", "fanduel": "mls", "betrivers": "soccer",
+        "bovada": "soccer", "fanduel": "soccer", "betrivers": "soccer",
         "pinnacle_sport": "soccer", "kambi": "soccer", "espn": "soccer",
         "smarkets": "soccer", "matchbook": "soccer",
         "ladbrokes_au": "soccer", "neds_au": "soccer", "kambi_multi": "soccer",

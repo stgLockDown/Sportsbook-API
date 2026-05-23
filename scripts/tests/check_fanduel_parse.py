@@ -215,4 +215,143 @@ assert "nj." in fanduel.TENANTS[1]
 assert "pa." in fanduel.TENANTS[2]
 print(f"  IL → NJ → PA fallback chain configured.\n")
 
+
+# ─── Soccer routing (page=SPORT&eventTypeId=1) ─────────────────────────────────
+#
+# Soccer can't use page=CUSTOM because customPageId=mls/epl/champions-league
+# all return 404 as of 2026-Q2. We route through the eventTypeId path
+# instead. These tests cover:
+#
+#   1. _build_request_params switches between CUSTOM and SPORT correctly.
+#   2. SPORT_MAP entries for soccer carry an event_type_id and (optionally)
+#      a competition_id filter for per-league slugs.
+#   3. _parse_response with competition_filter slices a multi-league
+#      payload down to a single league's events.
+#   4. Aggregator's "soccer" key routes to fanduel slug "soccer" (full
+#      payload) — not to the legacy "mls" customPageId which 404s.
+print("--- Soccer routing ---")
+
+# 1. Param-builder dispatch
+nfl_params = fanduel._build_request_params(fanduel.SPORT_MAP["nfl"], "nfl")
+assert_eq(nfl_params["page"], "CUSTOM", "NFL → CUSTOM")
+assert_eq(nfl_params["customPageId"], "nfl", "NFL customPageId")
+assert "eventTypeId" not in nfl_params, "NFL must not include eventTypeId"
+
+soccer_params = fanduel._build_request_params(fanduel.SPORT_MAP["soccer"], "soccer")
+assert_eq(soccer_params["page"], "SPORT", "soccer → SPORT")
+assert_eq(soccer_params["eventTypeId"], 1, "soccer eventTypeId=1")
+assert "customPageId" not in soccer_params, "soccer must not include customPageId"
+
+epl_params = fanduel._build_request_params(fanduel.SPORT_MAP["epl"], "epl")
+assert_eq(epl_params["page"], "SPORT", "epl → SPORT")
+assert_eq(epl_params["eventTypeId"], 1, "epl eventTypeId=1")
+
+# 2. SPORT_MAP shape — every soccer slug has event_type_id; per-league
+#    slugs additionally have a competition_id.
+for slug in ["soccer", "epl", "mls", "champions-league", "la-liga", "serie-a"]:
+    cfg = fanduel.SPORT_MAP[slug]
+    assert cfg.get("event_type_id") == 1, f"{slug} must have event_type_id=1"
+
+per_league = ["epl", "mls", "champions-league", "la-liga", "serie-a",
+              "eredivisie", "liga-mx", "brazil-serie-a", "world-cup", "nwsl",
+              "europa-league"]
+for slug in per_league:
+    cfg = fanduel.SPORT_MAP[slug]
+    assert "competition_id" in cfg and isinstance(cfg["competition_id"], int), (
+        f"{slug} must have integer competition_id"
+    )
+
+# Bare "soccer" is intentionally NOT scoped to a competition — it returns
+# the full multi-league payload.
+assert "competition_id" not in fanduel.SPORT_MAP["soccer"], \
+    "'soccer' slug must NOT carry a competition_id (returns all leagues)"
+
+# 3. Synthetic multi-league payload — verify competition_filter slicing.
+synthetic = {
+    "attachments": {
+        "events": {
+            "1001": {
+                "eventId": 1001, "name": "Arsenal v Chelsea",
+                "competitionId": 10932509,  # EPL
+                "openDate": "2026-08-15T14:00:00.000Z",
+            },
+            "1002": {
+                "eventId": 1002, "name": "Inter Miami v LA Galaxy",
+                "competitionId": 141,  # MLS
+                "openDate": "2026-07-04T23:30:00.000Z",
+            },
+            "1003": {
+                "eventId": 1003, "name": "Real Madrid v Barcelona",
+                "competitionId": 117,  # La Liga
+                "openDate": "2026-10-20T19:00:00.000Z",
+            },
+        },
+        "markets": {
+            "m1": {
+                "marketId": "m1", "eventId": 1001, "competitionId": 10932509,
+                "marketName": "Match Winner", "marketType": "MATCH_BETTING",
+                "runners": [
+                    {"runnerName": "Arsenal", "winRunnerOdds": {"americanDisplayOdds": {"americanOdds": "+120"}}},
+                    {"runnerName": "Chelsea", "winRunnerOdds": {"americanDisplayOdds": {"americanOdds": "+200"}}},
+                    {"runnerName": "Draw",    "winRunnerOdds": {"americanDisplayOdds": {"americanOdds": "+250"}}},
+                ],
+            },
+            "m2": {
+                "marketId": "m2", "eventId": 1002, "competitionId": 141,
+                "marketName": "Match Winner", "marketType": "MATCH_BETTING",
+                "runners": [
+                    {"runnerName": "Inter Miami", "winRunnerOdds": {"americanDisplayOdds": {"americanOdds": "-110"}}},
+                    {"runnerName": "LA Galaxy",   "winRunnerOdds": {"americanDisplayOdds": {"americanOdds": "+250"}}},
+                    {"runnerName": "Draw",        "winRunnerOdds": {"americanDisplayOdds": {"americanOdds": "+220"}}},
+                ],
+            },
+            "m3": {
+                "marketId": "m3", "eventId": 1003, "competitionId": 117,
+                "marketName": "Match Winner", "marketType": "MATCH_BETTING",
+                "runners": [
+                    {"runnerName": "Real Madrid", "winRunnerOdds": {"americanDisplayOdds": {"americanOdds": "+105"}}},
+                    {"runnerName": "Barcelona",   "winRunnerOdds": {"americanDisplayOdds": {"americanOdds": "+220"}}},
+                    {"runnerName": "Draw",        "winRunnerOdds": {"americanDisplayOdds": {"americanOdds": "+260"}}},
+                ],
+            },
+        },
+    },
+}
+
+# No filter → all 3 events
+all_events = fanduel._parse_response(synthetic, "Soccer", "Soccer")
+assert_eq(len(all_events), 3, "synthetic: 3 events with no filter")
+
+# EPL filter → just Arsenal v Chelsea
+epl_only = fanduel._parse_response(synthetic, "Soccer", "EPL", competition_filter=10932509)
+assert_eq(len(epl_only), 1, "synthetic: EPL filter → 1 event")
+assert_eq(epl_only[0].home_team, "Arsenal", "EPL home team")
+assert_eq(epl_only[0].away_team, "Chelsea", "EPL away team")
+
+# MLS filter → just Inter Miami
+mls_only = fanduel._parse_response(synthetic, "Soccer", "MLS", competition_filter=141)
+assert_eq(len(mls_only), 1, "synthetic: MLS filter → 1 event")
+assert_eq(mls_only[0].home_team, "Inter Miami", "MLS home team")
+
+# La Liga filter → just El Clasico
+laliga_only = fanduel._parse_response(synthetic, "Soccer", "La Liga", competition_filter=117)
+assert_eq(len(laliga_only), 1, "synthetic: La Liga filter → 1 event")
+assert_eq(laliga_only[0].home_team, "Real Madrid", "La Liga home team")
+
+# Filter that matches nothing → empty
+nada = fanduel._parse_response(synthetic, "Soccer", "X", competition_filter=99999999)
+assert_eq(len(nada), 0, "synthetic: bogus filter → 0 events")
+
+print(f"  Soccer routing + competition slicing: OK ({len(per_league)} per-league slugs)\n")
+
+
+# ─── Aggregator soccer routing ─────────────────────────────────────────────────
+print("--- Aggregator soccer routing ---")
+from scrapers import aggregator
+soccer_cfg = aggregator.SPORT_SLUGS["soccer"]
+assert_eq(soccer_cfg["fanduel"], "soccer",
+          "aggregator soccer.fanduel must route to FD 'soccer' slug")
+print("  aggregator['soccer']['fanduel'] = 'soccer' (multi-league payload)\n")
+
+
 print("*** ALL FANDUEL CHECKS PASSED ***")

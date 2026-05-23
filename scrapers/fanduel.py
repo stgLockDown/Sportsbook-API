@@ -7,11 +7,24 @@ we use IL as the primary tenant and fall back to NJ/PA on failure for
 redundancy.
 
 Endpoint: GET sbapi.{state}.sportsbook.fanduel.com/api/content-managed-page
-  ?page=CUSTOM&customPageId={sport_slug}&_ak={api_key}
 
-Returns a JSON document with `attachments.events` and `attachments.markets`
-keyed by id. We join markets to events via `eventId` and parse runner
-prices into our normalized Outcome / Market / Event shape.
+Two routing strategies, selected per-sport via SPORT_MAP[slug]["page"]:
+
+  page=CUSTOM&customPageId={slug}    — legacy "branded" pages, used by
+                                       all US team sports (NFL/NBA/MLB/NHL/
+                                       NCAAF/NCAAB/WNBA/UFC/golf/tennis/boxing).
+  page=SPORT&eventTypeId={int}       — Betfair-style super-sport pages,
+                                       used by soccer (eventTypeId=1) which
+                                       has no working customPageId.
+
+Both strategies return the same payload shape:
+  attachments.events  : { eventId  → { name, openDate, competitionId, … } }
+  attachments.markets : { marketId → { eventId, marketName, marketType,
+                                       runners: [{ runnerName, winRunnerOdds, … }] } }
+
+For the SPORT path we additionally support an optional `competitionId`
+filter on the slug config so a single fetch (e.g. eventTypeId=1) can be
+sliced into per-league snapshots (EPL → 10932509, MLS → 141, UCL → 228).
 
 Routes through the same Decodo US proxy used by DK and bet365 (since the
 FD API is geofenced to US states).
@@ -63,8 +76,20 @@ HEADERS = {
 REQUEST_TIMEOUT = 8.0
 MAX_ATTEMPTS_PER_TENANT = 2
 
-# FanDuel customPageId → our normalized sport / league.
+# FanDuel sport slug → routing config + normalized sport / league name.
+#
+# Each entry has at minimum {"sport", "league"}. Routing is selected by:
+#   * customPageId      → uses page=CUSTOM&customPageId=<slug>   (default)
+#   * event_type_id     → uses page=SPORT&eventTypeId=<int>
+#
+# When event_type_id is set, an optional competition_id filters the
+# response to a single league/competition (FD calls this competitionId).
+# When competition_id is None, all events under the eventTypeId are kept.
+#
+# Soccer uses eventTypeId=1 (the legacy Betfair convention FD inherits).
+# customPageId=mls / epl / champions-league all return 404 as of 2026-Q2.
 SPORT_MAP = {
+    # ── customPageId path (page=CUSTOM) ─────────────────────────────────
     "nfl":              {"sport": "Football",   "league": "NFL"},
     "nba":              {"sport": "Basketball", "league": "NBA"},
     "mlb":              {"sport": "Baseball",   "league": "MLB"},
@@ -72,13 +97,45 @@ SPORT_MAP = {
     "ncaaf":            {"sport": "Football",   "league": "NCAAF"},
     "ncaab":            {"sport": "Basketball", "league": "NCAAB"},
     "wnba":             {"sport": "Basketball", "league": "WNBA"},
-    "mls":              {"sport": "Soccer",     "league": "MLS"},
-    "epl":              {"sport": "Soccer",     "league": "EPL"},
-    "champions-league": {"sport": "Soccer",     "league": "Champions League"},
     "golf":             {"sport": "Golf",       "league": "PGA"},
     "ufc":              {"sport": "MMA",        "league": "UFC"},
     "boxing":           {"sport": "Boxing",     "league": "Boxing"},
     "tennis":           {"sport": "Tennis",     "league": "Tennis"},
+
+    # ── eventTypeId path (page=SPORT) ───────────────────────────────────
+    # Soccer super-sport: one fetch returns ~85 competitions / 140+ events.
+    # Per-league slugs share the same upstream payload but filter to one
+    # competitionId; consumers should call the most specific slug they need.
+    #
+    # Competition IDs are stable Betfair-derived identifiers and do not
+    # rotate season-to-season. Verified against live FD payload 2026-Q2.
+    # Off-season leagues (Bundesliga / Ligue 1) are not yet listed: they
+    # only appear in the upstream payload while their season is active.
+    # Add them by name match when needed (see _resolve_competition_id).
+    "soccer":           {"sport": "Soccer", "league": "Soccer",
+                         "event_type_id": 1},
+    "epl":              {"sport": "Soccer", "league": "EPL",
+                         "event_type_id": 1, "competition_id": 10932509},
+    "mls":              {"sport": "Soccer", "league": "MLS",
+                         "event_type_id": 1, "competition_id": 141},
+    "champions-league": {"sport": "Soccer", "league": "Champions League",
+                         "event_type_id": 1, "competition_id": 228},
+    "europa-league":    {"sport": "Soccer", "league": "Europa Conference League",
+                         "event_type_id": 1, "competition_id": 12375833},
+    "la-liga":          {"sport": "Soccer", "league": "La Liga",
+                         "event_type_id": 1, "competition_id": 117},
+    "serie-a":          {"sport": "Soccer", "league": "Serie A",
+                         "event_type_id": 1, "competition_id": 81},
+    "eredivisie":       {"sport": "Soccer", "league": "Eredivisie",
+                         "event_type_id": 1, "competition_id": 9404054},
+    "liga-mx":          {"sport": "Soccer", "league": "Liga MX",
+                         "event_type_id": 1, "competition_id": 5627174},
+    "brazil-serie-a":   {"sport": "Soccer", "league": "Brazilian Serie A",
+                         "event_type_id": 1, "competition_id": 13},
+    "world-cup":        {"sport": "Soccer", "league": "FIFA World Cup",
+                         "event_type_id": 1, "competition_id": 12469077},
+    "nwsl":             {"sport": "Soccer", "league": "NWSL",
+                         "event_type_id": 1, "competition_id": 12331715},
 }
 
 
@@ -282,7 +339,31 @@ def _split_event_name(ev_name: str) -> tuple:
     return ("", "")
 
 
-def _parse_response(data: dict, sport: str, league: str) -> List[Event]:
+def _build_request_params(sport_info: dict, sport_slug: str) -> dict:
+    """Return the query params dict for the content-managed-page call.
+
+    Selects between page=CUSTOM (legacy customPageId path) and page=SPORT
+    (eventTypeId path used by soccer) based on what's set in sport_info.
+    """
+    if "event_type_id" in sport_info:
+        return {
+            "page": "SPORT",
+            "eventTypeId": sport_info["event_type_id"],
+            "_ak": API_KEY,
+        }
+    return {
+        "page": "CUSTOM",
+        "customPageId": sport_slug,
+        "_ak": API_KEY,
+    }
+
+
+def _parse_response(
+    data: dict,
+    sport: str,
+    league: str,
+    competition_filter: Optional[int] = None,
+) -> List[Event]:
     """Parse a content-managed-page payload into our Event models.
 
     The payload structure is:
@@ -306,6 +387,14 @@ def _parse_response(data: dict, sport: str, league: str) -> List[Event]:
 
     events: List[Event] = []
     for eid, ev in raw_events.items():
+        # When fetching a super-sport page (e.g. eventTypeId=1 = Soccer),
+        # filter to a single competition so each per-league slug returns
+        # only its own fixtures.
+        if competition_filter is not None:
+            ev_comp = ev.get("competitionId")
+            if ev_comp != competition_filter:
+                continue
+
         ev_name = ev.get("name", "") or ""
         start_time = _parse_start_time(ev.get("openDate", ""))
 
@@ -393,9 +482,14 @@ def _parse_response(data: dict, sport: str, league: str) -> List[Event]:
 
 # ─── HTTP fetch with retry + tenant fallback ──────────────────────────
 
-async def _fetch_one(client: httpx.AsyncClient, url: str, sport_slug: str) -> Optional[dict]:
+async def _fetch_one(
+    client: httpx.AsyncClient,
+    url: str,
+    sport_slug: str,
+    sport_info: dict,
+) -> Optional[dict]:
     """Single GET attempt. Returns parsed JSON on 200, None otherwise."""
-    params = {"page": "CUSTOM", "customPageId": sport_slug, "_ak": API_KEY}
+    params = _build_request_params(sport_info, sport_slug)
     try:
         resp = await client.get(url, params=params, timeout=REQUEST_TIMEOUT)
     except (httpx.TimeoutException, httpx.NetworkError) as exc:
@@ -418,7 +512,9 @@ async def _fetch_one(client: httpx.AsyncClient, url: str, sport_slug: str) -> Op
 
 
 async def _fetch_with_fallback(
-    client: httpx.AsyncClient, sport_slug: str,
+    client: httpx.AsyncClient,
+    sport_slug: str,
+    sport_info: dict,
 ) -> Optional[dict]:
     """Try each tenant in order with limited retries per tenant.
 
@@ -427,7 +523,7 @@ async def _fetch_with_fallback(
     last_error_payload: Optional[dict] = None
     for tenant_url in TENANTS:
         for attempt in range(MAX_ATTEMPTS_PER_TENANT):
-            data = await _fetch_one(client, tenant_url, sport_slug)
+            data = await _fetch_one(client, tenant_url, sport_slug, sport_info)
             if data is not None:
                 # Treat the 'error: true' response shape as a soft failure.
                 if isinstance(data, dict) and data.get("error") is True:
@@ -468,12 +564,17 @@ async def fetch_sport(
         sport_info = SPORT_MAP.get(sport_slug, {
             "sport": sport_slug.upper(), "league": sport_slug.upper(),
         })
-        data = await _fetch_with_fallback(client, sport_slug)
+        data = await _fetch_with_fallback(client, sport_slug, sport_info)
         if not data:
             logger.error("FanDuel: all tenants failed for sport=%s", sport_slug)
             return []
 
-        events = _parse_response(data, sport_info["sport"], sport_info["league"])
+        events = _parse_response(
+            data,
+            sport_info["sport"],
+            sport_info["league"],
+            competition_filter=sport_info.get("competition_id"),
+        )
         if not events:
             return []
 
@@ -532,3 +633,27 @@ async def fetch_ncaab(client: Optional[httpx.AsyncClient] = None) -> List[Sports
 
 async def fetch_wnba(client: Optional[httpx.AsyncClient] = None) -> List[SportsbookSnapshot]:
     return await fetch_sport("wnba", client)
+
+
+# ─── Soccer convenience wrappers ────────────────────────────────────────
+# These all hit the same upstream payload (eventTypeId=1) but each filters
+# to a single competition. If you need every soccer event in one shot,
+# call fetch_sport("soccer", …) instead.
+
+async def fetch_soccer(client: Optional[httpx.AsyncClient] = None) -> List[SportsbookSnapshot]:
+    return await fetch_sport("soccer", client)
+
+
+async def fetch_epl(client: Optional[httpx.AsyncClient] = None) -> List[SportsbookSnapshot]:
+    return await fetch_sport("epl", client)
+
+
+async def fetch_mls(client: Optional[httpx.AsyncClient] = None) -> List[SportsbookSnapshot]:
+    return await fetch_sport("mls", client)
+
+
+async def fetch_champions_league(
+    client: Optional[httpx.AsyncClient] = None,
+) -> List[SportsbookSnapshot]:
+    return await fetch_sport("champions-league", client)
+
