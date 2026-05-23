@@ -17,4 +17,3 @@ numReplicas = 1
 
 # US region — unlocks all US sportsbook scrapers.
 # Valid Railway regions: us-east4, us-west1, us-west2, europe-west4, asia-southeast1
-region = "us-east4"
