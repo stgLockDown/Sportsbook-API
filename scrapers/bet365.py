@@ -323,6 +323,25 @@ def _build_events_from_records(
     current_event_fi: Optional[str] = None     # for EV-context per-sport blobs
     current_event_meta: Optional[Dict[str, Any]] = None  # ditto
     in_target_sport: bool = False              # True iff current_cl == target_cl
+    # FIs we've positively associated with the target sport (via an MA whose
+    # CL matched target_cl, or via an EV under target CL). Used to accept
+    # fixture-metadata PAs whose surrounding context didn't carry CL.
+    target_fis: set = set()
+    # Fixture-PAs we saw before any target-sport context was established.
+    # When a later record (MA/EV/price-PA) tags an FI as target, we
+    # promote that FI's pending metadata into `fixtures`. This handles
+    # columnar pods where the fixture-PA arrives ahead of the tile-MA.
+    pending_fixtures: Dict[str, Dict[str, Any]] = {}
+
+    def _promote_pending(fi: str):
+        meta = pending_fixtures.pop(fi, None)
+        if not meta:
+            return
+        _record_fixture(
+            fi=fi, home=meta.get("home", ""), away=meta.get("away", ""),
+            start=meta.get("start"), league=meta.get("league", ""),
+            live=False, desc=meta.get("desc", ""),
+        )
 
     def _record_fixture(fi: str, home: str, away: str, start, league: str, live: bool, desc: str = ""):
         if not fi:
@@ -399,6 +418,8 @@ def _build_events_from_records(
             _record_fixture(fi, home or name, away, start, league_name, is_live, name)
             current_event_fi = fi
             current_event_meta = fixtures[fi]
+            target_fis.add(fi)
+            _promote_pending(fi)
 
         elif rtype == "MA":
             cl_field = fields.get("CL")
@@ -422,6 +443,8 @@ def _build_events_from_records(
                 fi = fields.get("FI") or current_event_fi or ""
                 if not fi:
                     continue
+                target_fis.add(fi)
+                _promote_pending(fi)
                 # Make sure we have a fixture row for this FI even if we
                 # haven't seen the metadata PA yet \u2014 record placeholder.
                 _record_fixture(
@@ -438,7 +461,14 @@ def _build_events_from_records(
                 am, dec = _parse_odds(ma_od)
                 if am is None:
                     continue
-                market_name = fields.get("MN") or "Special"
+                # MN values often look like "Money Line: NY Knicks" or
+                # "Spread: NY Knicks -3.5" — strip the per-selection suffix
+                # so all selections in the same market merge together.
+                raw_market_name = fields.get("MN") or "Special"
+                if ":" in raw_market_name:
+                    market_name = raw_market_name.split(":", 1)[0].strip()
+                else:
+                    market_name = raw_market_name
                 mtype = _classify_market(market_name)
                 point = _parse_point(fields.get("HA")) or _parse_point(fields.get("HD"))
                 _add_outcome(fi, market_name, mtype, ma_name, am, dec, point)
@@ -476,8 +506,26 @@ def _build_events_from_records(
             fi = (fields.get("FI") or "").strip()
 
             if not od:
-                # Fixture-metadata PA. Only record if we're in target sport.
-                if not in_target_sport:
+                # Fixture-metadata PA. Record if either:
+                #   (a) we're currently inside target-sport context, OR
+                #   (b) this FI was already tagged as target via a prior
+                #       MA/EV in this same blob (handles columnar pods
+                #       where tile-MAs come AFTER fixture-PAs but on the
+                #       same FI).
+                if not in_target_sport and (not fi or fi not in target_fis):
+                    # Defer: stash unknown fixture-PAs so a later MA-OD
+                    # or price-PA referencing this FI can promote them.
+                    home = fields.get("NA", "")
+                    away = fields.get("N2", "")
+                    fd = fields.get("FD", "")
+                    if fi and (home or away or fd):
+                        league_name = fields.get("L3") or CL_NAME.get(target_cl, sport.upper())
+                        start = _parse_start_time(fields.get("BC"))
+                        pending_fixtures[fi] = {
+                            "home": home, "away": away, "start": start,
+                            "league": league_name,
+                            "desc": fd or (f"{away} @ {home}".strip(" @")),
+                        }
                     continue
                 home = fields.get("NA", "")
                 away = fields.get("N2", "")
@@ -495,16 +543,25 @@ def _build_events_from_records(
                     )
                 continue
 
-            # Price PA. Need a parent FI and a current market context, AND
-            # must be in target sport (otherwise we'd attach NBA odds to
-            # MLB fixtures from cross-sport tile-style pods).
-            if not in_target_sport:
-                continue
+            # Price PA. Need a parent FI and a current market context.
+            # Accept if either we're inside target-sport context OR the
+            # FI was already tagged as target via a prior MA/EV. This
+            # handles columnar pods where price-PAs trail tile-MAs.
+            if not in_target_sport and (not fi or fi not in target_fis):
+                # If we have a current context but the FI is unknown,
+                # use the active event FI as fallback.
+                if current_event_fi and current_event_fi in target_fis:
+                    fi = current_event_fi
+                else:
+                    continue
             if current_market_name is None:
                 # No active market context \u2014 we can't infer the market name.
                 continue
             if not fi:
                 fi = current_event_fi or ""
+            if fi:
+                target_fis.add(fi)
+                _promote_pending(fi)
             if not fi or fi not in fixtures:
                 # PA references a fixture we never recorded (probably from
                 # another sport that leaked through MA filtering).
