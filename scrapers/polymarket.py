@@ -12,6 +12,7 @@ Prices are in decimal 0-1 representing implied probability.
 """
 
 import httpx
+from ._proxy import get_client_kwargs
 import asyncio
 import json
 import logging
@@ -250,7 +251,7 @@ def _parse_polymarket_event(event_data: dict, sport: str) -> Optional[Event]:
 
 async def fetch_sport(sport: str) -> List[SportsbookSnapshot]:
     """Fetch Polymarket events for a given sport."""
-    async with httpx.AsyncClient(timeout=25, headers=HEADERS) as client:
+    async with httpx.AsyncClient(timeout=25, headers=HEADERS, **get_client_kwargs("US")) as client:
         events_raw = await _fetch_events(client, sport)
         
         if not events_raw:

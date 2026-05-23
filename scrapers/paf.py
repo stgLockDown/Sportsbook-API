@@ -8,6 +8,7 @@ import asyncio
 from datetime import datetime, timezone
 from typing import List, Dict
 from .models import SportsbookSnapshot, Event, Market, Outcome, MarketType
+from ._proxy import get_client_kwargs
 
 BASE = "https://eu-offering-api.kambicdn.com/offering/v2018/paf"
 
@@ -138,8 +139,7 @@ async def fetch_sport(sport: str) -> List[SportsbookSnapshot]:
 
     async with httpx.AsyncClient(
         headers={"Accept": "application/json"},
-        follow_redirects=True,
-    ) as client:
+        follow_redirects=True, **get_client_kwargs("EU")) as client:
         raw_events = await _fetch_events_list(client, sport_path)
         if not raw_events:
             return []

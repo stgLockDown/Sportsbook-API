@@ -18,6 +18,7 @@ import httpx
 from datetime import datetime, timezone
 from typing import List, Optional, Tuple
 from .models import SportsbookSnapshot, Event, Market, Outcome, MarketType
+from ._proxy import get_client_kwargs
 
 BASE_URL = "https://eu-offering-api.kambicdn.com/offering/v2018"
 
@@ -109,7 +110,7 @@ async def fetch_operator(operator_key: str, sport: str) -> List[SportsbookSnapsh
 
     url = f"{BASE_URL}/{code}/listView/{sport_path}/all/all/all/matches.json?lang=en_US&market={market_param}"
 
-    async with httpx.AsyncClient(timeout=20) as client:
+    async with httpx.AsyncClient(timeout=20, **get_client_kwargs("EU")) as client:
         try:
             r = await client.get(url)
             if r.status_code != 200:

@@ -27,6 +27,7 @@ from typing import List, Dict, Optional
 import httpx
 
 from .models import SportsbookSnapshot, Event, Market, Outcome, MarketType
+from ._proxy import get_client_kwargs
 
 API_KEY = os.getenv("THE_ODDS_API_KEY")
 BASE_URL = "https://api.the-odds-api.com/v4"
@@ -171,7 +172,7 @@ async def fetch_sport(sport_key: str) -> List[SportsbookSnapshot]:
     if not api_sport:
         return []
 
-    async with httpx.AsyncClient(timeout=30) as client:
+    async with httpx.AsyncClient(timeout=30, **get_client_kwargs("US")) as client:
         raw = await _fetch_odds(client, api_sport)
 
     # Group events by bookmaker

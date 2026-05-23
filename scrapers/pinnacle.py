@@ -10,6 +10,7 @@ from typing import List, Optional, Dict, Tuple
 from .models import (
     SportsbookSnapshot, Event, Market, Outcome, MarketType
 )
+from ._proxy import get_client_kwargs
 
 SPORTSBOOK_NAME = "Pinnacle"
 
@@ -258,7 +259,7 @@ async def fetch_sport(sport_key: str, client: Optional[httpx.AsyncClient] = None
     """Fetch odds for a sport from Pinnacle."""
     close_client = False
     if client is None:
-        client = httpx.AsyncClient(headers=HEADERS, timeout=30.0)
+        client = httpx.AsyncClient(headers=HEADERS, timeout=30.0, **get_client_kwargs("UK"))
         close_client = True
 
     snapshots = []
@@ -311,7 +312,7 @@ async def fetch_league(league_key: str, client: Optional[httpx.AsyncClient] = No
     """Fetch odds for a specific league from Pinnacle."""
     close_client = False
     if client is None:
-        client = httpx.AsyncClient(headers=HEADERS, timeout=30.0)
+        client = httpx.AsyncClient(headers=HEADERS, timeout=30.0, **get_client_kwargs("UK"))
         close_client = True
 
     snapshots = []
@@ -359,7 +360,7 @@ async def fetch_league(league_key: str, client: Optional[httpx.AsyncClient] = No
 async def fetch_all() -> List[SportsbookSnapshot]:
     """Fetch odds for all supported sports from Pinnacle."""
     all_snapshots = []
-    async with httpx.AsyncClient(headers=HEADERS, timeout=30.0) as client:
+    async with httpx.AsyncClient(headers=HEADERS, timeout=30.0, **get_client_kwargs("UK")) as client:
         for sport_key in SPORT_IDS.keys():
             snapshots = await fetch_sport(sport_key, client)
             all_snapshots.extend(snapshots)

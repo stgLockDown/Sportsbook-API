@@ -8,6 +8,7 @@ import asyncio
 from datetime import datetime, timezone
 from typing import List, Dict, Optional
 from .models import SportsbookSnapshot, Event, Market, Outcome, MarketType
+from ._proxy import get_client_kwargs
 
 BASE = "https://guest.api.arcadia.pinnacle.com/0.1"
 
@@ -297,8 +298,7 @@ async def fetch_sport(sport: str) -> List[SportsbookSnapshot]:
 
     async with httpx.AsyncClient(
         headers={"Accept": "application/json"},
-        follow_redirects=True,
-    ) as client:
+        follow_redirects=True, **get_client_kwargs("UK")) as client:
         # Fetch matchups and markets concurrently
         matchups_task = _fetch_matchups(client, sport_id, league_ids)
         markets_task = _fetch_markets(client, sport_id)

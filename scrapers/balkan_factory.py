@@ -22,6 +22,7 @@ import json
 from datetime import datetime, timezone
 from typing import List, Optional
 from .models import SportsbookSnapshot, Event, Market, Outcome, MarketType
+from ._proxy import get_client_kwargs
 
 HEADERS = {
     "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
@@ -223,7 +224,7 @@ async def fetch_operator_sport(operator_id: str, sport_key: str) -> List[Sportsb
     
     url = f"{base_url}/{code}/mob?annex=0&desession=true"
 
-    async with httpx.AsyncClient(timeout=25.0, follow_redirects=True) as client:
+    async with httpx.AsyncClient(timeout=25.0, follow_redirects=True, **get_client_kwargs("EU")) as client:
         try:
             resp = await client.get(url, headers=HEADERS)
             if resp.status_code != 200:
