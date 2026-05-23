@@ -214,4 +214,50 @@ if _failures:
     raise AssertionError(f"_league_matches matrix failed: {_failures}")
 
 print(f"  All {len(_match_cases)} _league_matches cases OK")
+
+# ─── Contextual disambiguation (home/away/description tells) ──────
+# When league is empty or generic, the matcher consults team names &
+# description for sibling-league markers. These are real production
+# cases observed during the rollout of fix/bet365-league-filter.
+print("\n--- Contextual sibling-marker disambiguation ---")
+
+# (league, sport, target_cl, home, away, description, expected) tuples
+_ctx_cases = [
+    # Real production case: "Basketball"-tagged WNBA games leaking into NBA
+    ("Basketball", "nba",  18, "LA Sparks",   "LV Aces",      "",                                False),
+    ("Basketball", "nba",  18, "PHX Mercury", "ATL Dream",    "",                                False),
+    # Real production case: "Basketball"-tagged NBA futures stay in NBA
+    ("Basketball", "nba",  18, "NBA Eastern Conference 2025/26", "Conference Finals MVP", "",    True),
+    ("Basketball", "nba",  18, "NBA Championship 2025/26",       "To Win Outright",        "",   True),
+    ("Basketball", "nba",  18, "CLE Cavaliers v NY Knicks",      "To Win Series",          "",   True),
+    # Real production case: empty pods (no team names) accepted as orphans
+    ("Basketball", "nba",  18, "",            "",             "",                                True),
+    # WNBA games stay in WNBA endpoint
+    ("Basketball", "wnba", 18, "LA Sparks",   "LV Aces",      "",                                True),
+    # NBA futures should NOT appear under WNBA endpoint (negative marker)
+    ("Basketball", "wnba", 18, "NBA Eastern Conference 2025/26", "Conference Finals MVP", "",    False),
+    # NCAAB leak prevention
+    ("Basketball", "ncaab", 18, "LA Sparks",  "LV Aces",      "",                                False),
+    ("Basketball", "ncaab", 18, "Duke Blue Devils", "UNC Tar Heels", "",                         True),
+    # Football: NFL endpoint should reject NCAA-described games
+    ("Football",   "nfl",   12, "Alabama Crimson Tide", "Auburn Tigers", "NCAA Football Game",   False),
+    ("Football",   "nfl",   12, "KC Chiefs",   "BUF Bills",    "",                                True),
+]
+_ctx_failures = []
+for league, sport, target_cl, home, away, desc, expected in _ctx_cases:
+    actual = bet365._league_matches(
+        league, sport, target_cl=target_cl,
+        home=home, away=away, description=desc,
+    )
+    status = "OK" if actual == expected else "FAIL"
+    summary = f"league={league!r} home={home!r:35s} away={away!r:25s}"
+    print(f"  [{status}] sport={sport:6s} {summary}  → {actual} (expected {expected})")
+    if actual != expected:
+        _ctx_failures.append((league, sport, home, away, desc, expected, actual))
+
+if _ctx_failures:
+    print(f"\n{len(_ctx_failures)} contextual case(s) failed")
+    raise AssertionError(f"Contextual matcher failures: {_ctx_failures}")
+
+print(f"  All {len(_ctx_cases)} contextual cases OK")
 print("\n*** ALL TESTS PASSED ***")

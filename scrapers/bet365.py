@@ -104,67 +104,112 @@ SPORT_LEAGUE_FILTER: Dict[str, Tuple[str, ...]] = {
     "mma":    ("mma", "ufc", "bellator", "pfl"),
 }
 
+# Negative markers: substrings that, if found anywhere in
+# (league + home + away + description), indicate this fixture
+# belongs to a SIBLING league (one that shares CL with our sport).
+# Used as a tie-breaker when the league field is empty or set to the
+# generic class label ("Basketball", "Football") so we can still
+# strip out orphan-pod games whose team names give away their league.
+SPORT_NEGATIVE_MARKERS: Dict[str, Tuple[str, ...]] = {
+    # NBA: reject WNBA team names + collegiate markers + virtual
+    "nba":   ("wnba", "ncaa", "college", "blitz", "cbb",
+              # WNBA team names (full + abbreviations bet365 uses)
+              "sparks", "aces", "mercury", "dream", "fever", "liberty",
+              "lynx", "mystics", "storm", "sun", "wings", "valkyries"),
+    # NCAAB: reject NBA + WNBA team names + virtual
+    "ncaab": ("nba", "wnba", "blitz",
+              "sparks", "aces", "mercury", "dream", "fever", "liberty",
+              "lynx", "mystics", "storm", "sun", "wings", "valkyries"),
+    # WNBA: reject NBA / NCAA markers + virtual
+    "wnba":  ("nba conference", "nba championship", "nba futures",
+              "nba eastern", "nba western", "ncaa", "college", "blitz", "cbb"),
+    # NFL: reject NCAAF / college markers
+    "nfl":   ("ncaa", "college football", "cfb"),
+    # NCAAF: reject NFL markers
+    "ncaaf": ("nfl",),
+    # Combat split
+    "boxing": ("mma", "ufc", "bellator", "pfl"),
+    "mma":    ("boxing",),
+}
 
-def _league_matches(league: str, sport: str, target_cl: Optional[int] = None) -> bool:
-    """Return True iff `league` should be accepted for `sport`.
 
-    A sport with no SPORT_LEAGUE_FILTER entry accepts every league in
-    its CL class (legacy behaviour). A sport with an entry accepts:
-      * any league whose lowercase rep contains a configured needle
-        (with word-boundary checking so "nba" doesn't match "wnba"); OR
-      * an empty / missing league field — these are orphan pods that
-        the CL filter (target_cl) has already validated, and we'd
-        rather keep an unlabelled fixture than drop it; OR
-      * a league exactly equal to the generic class label
-        (CL_NAME[target_cl], e.g. "Basketball" for CL=18). This is the
-        fallback we ourselves write into `meta["league"]` when no L3
-        was captured, so it's the same case as "empty league" above —
-        accept and trust the CL filter.
+def _has_negative_marker(text: str, sport: str) -> bool:
+    """Return True iff `text` contains any sibling-league marker for `sport`."""
+    markers = SPORT_NEGATIVE_MARKERS.get(sport)
+    if not markers:
+        return False
+    text_lc = text.lower()
+    return any(m in text_lc for m in markers)
 
-    The strict-rejection case is:
-      * league set to a known *positively-labelled* sibling league
-        (e.g. "WNBA" when sport=nba, "NCAA Basketball" when sport=nba,
-        "B-EBASKBLITZ4X5" virtual league) — these would otherwise
-        pollute the per-sport view because they share CL with the
-        target sport.
+
+def _league_matches(
+    league: str,
+    sport: str,
+    target_cl: Optional[int] = None,
+    home: str = "",
+    away: str = "",
+    description: str = "",
+) -> bool:
+    """Return True iff this fixture should be accepted for `sport`.
+
+    Strategy (in order):
+      1. Sport not in SPORT_LEAGUE_FILTER → accept everything (legacy
+         behaviour preserved for sports without shared-CL ambiguity).
+      2. League is positively a sibling (e.g. "WNBA" when sport=nba) →
+         reject. This is the primary disambiguation path — bet365's L3
+         field, when populated, is authoritative.
+      3. League contains a positive needle for `sport` (with
+         word-boundary matching so "nba" doesn't match "wnba") → accept.
+      4. League is empty or equals the generic class label
+         ("Basketball", "Football", ...) → fall through to context
+         check on home/away/description: if any of those contain a
+         sibling-league marker (team names, "NCAA", "NBA Conference"),
+         reject; otherwise accept.
+      5. League is set but doesn't match → reject.
     """
     needles = SPORT_LEAGUE_FILTER.get(sport)
     if not needles:
         return True
-    if not league:
-        # No league string captured. Trust the CL filter (target_cl)
-        # that already accepted this fixture; keep it.
-        return True
 
-    # Treat the generic class fallback ("Basketball", "Football", ...)
-    # as equivalent to an empty league. We populate this ourselves when
-    # L3 is missing, so it carries no real disambiguation info.
-    if target_cl is not None:
-        generic = CL_NAME.get(target_cl)
-        if generic and league.strip().lower() == generic.lower():
-            return True
+    league_lc = (league or "").strip().lower()
 
-    league_lc = league.lower()
-
-    # Word-boundary substring match.
-    def _word_match(needle: str) -> bool:
+    # Rule 2/3: word-boundary substring match against positive needles.
+    def _word_match(text: str, needle: str) -> bool:
         idx = 0
         while True:
-            pos = league_lc.find(needle, idx)
+            pos = text.find(needle, idx)
             if pos < 0:
                 return False
-            before_ok = pos == 0 or not league_lc[pos - 1].isalpha()
+            before_ok = pos == 0 or not text[pos - 1].isalpha()
             after_idx = pos + len(needle)
-            after_ok = after_idx == len(league_lc) or not league_lc[after_idx].isalpha()
+            after_ok = after_idx == len(text) or not text[after_idx].isalpha()
             if before_ok and after_ok:
                 return True
             idx = pos + 1
 
-    if any(_word_match(n) for n in needles):
-        return True
+    # Determine if league_lc is "uninformative" (empty / generic class fallback).
+    generic_lc = ""
+    if target_cl is not None:
+        generic = CL_NAME.get(target_cl)
+        if generic:
+            generic_lc = generic.lower()
+    is_uninformative = (not league_lc) or (league_lc == generic_lc)
 
-    # League is set but doesn't match any positive needle. Reject.
-    return False
+    if not is_uninformative:
+        # League field has a real value. If it positively matches our
+        # sport, accept; if it positively matches a sibling, reject.
+        if any(_word_match(league_lc, n) for n in needles):
+            return True
+        # Real but non-matching league → almost certainly a sibling.
+        return False
+
+    # Rule 4: uninformative league. Check team names / description for
+    # sibling-league tells. If any negative marker fires, reject; else
+    # trust the CL filter and accept.
+    context = " ".join([league or "", home or "", away or "", description or ""])
+    if _has_negative_marker(context, sport):
+        return False
+    return True
 
 
 # Reverse mapping for league naming
@@ -727,7 +772,13 @@ def _build_events_from_records(
             continue
 
         league = meta.get("league") or ""
-        if not _league_matches(league, sport, target_cl=target_cl):
+        if not _league_matches(
+            league, sport,
+            target_cl=target_cl,
+            home=meta.get("home", "") or "",
+            away=meta.get("away", "") or "",
+            description=meta.get("desc", "") or "",
+        ):
             rejected_by_league_filter += 1
             continue
 
