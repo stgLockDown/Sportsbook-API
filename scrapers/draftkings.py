@@ -148,6 +148,15 @@ def _fetch_dk_markets(
         "sec-ch-ua-mobile": "?0",
         "sec-ch-ua-platform": '"macOS"',
     }
+    # Replay through the same residential exit we primed cookies through.
+    # If US_PROXY_URL is unset, get_proxies_dict returns None and curl_cffi
+    # uses a direct connection (works from sandbox; gets DC-IP-flagged in prod).
+    try:
+        from ._proxy import get_proxies_dict
+        proxies = get_proxies_dict("US")
+    except Exception:
+        proxies = None
+
     try:
         r = cf.get(
             url,
@@ -157,6 +166,7 @@ def _fetch_dk_markets(
             impersonate="chrome120",
             timeout=15,
             allow_redirects=False,
+            proxies=proxies,
         )
         if r.status_code != 200:
             logger.warning("DK %s markets returned %s (cookies stale?)", league_id, r.status_code)
