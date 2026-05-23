@@ -29,7 +29,7 @@ from .models import (
     AggregatedEvent, BestOdds
 )
 from . import bovada, fanduel, betrivers, pinnacle, kambi, espn, smarkets, matchbook
-from . import ladbrokes_au, neds_au, kambi_multi, underdog, draftkings
+from . import ladbrokes_au, neds_au, kambi_multi, underdog, draftkings, bet365 as bet365_direct
 from . import actionnetwork, twentytwobet, pointsbet
 from . import pinnacle_v3, unibet, paf
 from . import coolbet, leon, pinnacle_guest
@@ -992,11 +992,24 @@ async def fetch_single_book(sport_key: str, sportsbook: str) -> List[SportsbookS
                 if snap:
                     snapshots = [snap]
         elif sb == "bet365":
-            sport = slug_info.get("actionnetwork")
-            if sport:
-                snap = await actionnetwork.fetch_single_book(sport, "bet365")
-                if snap:
-                    snapshots = [snap]
+            # Try direct Cloudflare-bypass scraper first (Playwright-primed
+            # cookies replayed via curl_cffi through Decodo US-RCN). Falls
+            # back to ActionNetwork if the session isn't ready yet or
+            # bet365 returns 0 events for this sport.
+            sport_dk = slug_info.get("draftkings") or slug_info.get("actionnetwork")
+            if sport_dk:
+                try:
+                    direct = await bet365_direct.fetch_sport(sport_dk)
+                    if direct and direct[0].events:
+                        snapshots = direct
+                except Exception:
+                    snapshots = []
+            if not snapshots:
+                sport = slug_info.get("actionnetwork")
+                if sport:
+                    snap = await actionnetwork.fetch_single_book(sport, "bet365")
+                    if snap:
+                        snapshots = [snap]
         elif sb == "caesars":
             sport = slug_info.get("actionnetwork")
             if sport:
