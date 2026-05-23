@@ -232,6 +232,15 @@ SPORT_SLUGS = {
         "polymarket": "basketball_ncaab",
         "onexbet": "basketball",
     },
+    "wnba": {
+        "sport": "Basketball", "league": "WNBA",
+        "fanduel": "wnba", "draftkings": "wnba",
+        "actionnetwork": "basketball_wnba",
+        # bet365 covers WNBA as part of basketball (CL=18 in bet365 is
+        # NBA but WNBA falls under the same broad sport category there
+        # with separate competition IDs we don't currently target).
+        "kambi": "basketball", "betrivers": "basketball",
+    },
     "soccer": {
         "sport": "Soccer", "league": "Soccer",
         "bovada": "soccer", "fanduel": "mls", "betrivers": "soccer",
