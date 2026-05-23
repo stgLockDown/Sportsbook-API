@@ -5,6 +5,7 @@ Matchbook is a betting exchange offering back/lay prices.
 Has 347+ events across multiple sports with competitive odds.
 """
 import httpx
+from ._proxy import get_client_kwargs
 import asyncio
 import logging
 from datetime import datetime, timezone
@@ -58,7 +59,7 @@ async def fetch_sport(sport: str) -> List[SportsbookSnapshot]:
 
     events = []
     try:
-        async with httpx.AsyncClient(timeout=30, headers=HEADERS) as client:
+        async with httpx.AsyncClient(timeout=30, headers=HEADERS, **get_client_kwargs("UK")) as client:
             url = f"{BASE_URL}/events"
             params = {
                 "sport-ids": sport_id,

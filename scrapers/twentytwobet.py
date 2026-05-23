@@ -24,6 +24,7 @@ Sports: Basketball(3), Ice Hockey(2), Baseball(6), Soccer(1), Tennis(4),
 """
 
 import httpx
+from ._proxy import get_client_kwargs
 import asyncio
 from datetime import datetime, timezone
 from typing import List, Optional
@@ -240,7 +241,7 @@ async def fetch_sport(sport: str) -> List[SportsbookSnapshot]:
     if sport_id is None:
         return []
 
-    async with httpx.AsyncClient(timeout=20, headers=HEADERS) as client:
+    async with httpx.AsyncClient(timeout=20, headers=HEADERS, **get_client_kwargs("EU")) as client:
         try:
             url = f"{BASE_URL}?sports={sport_id}&count=200&lng=en&mode=4"
             resp = await client.get(url)

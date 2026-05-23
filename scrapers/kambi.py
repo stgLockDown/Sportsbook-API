@@ -10,6 +10,7 @@ Two approaches:
   2. betoffer/group - for getting events + odds by group/league ID
 """
 import httpx
+from ._proxy import get_client_kwargs
 import asyncio
 import logging
 from datetime import datetime, timezone
@@ -391,7 +392,7 @@ async def fetch_sport(sport: str) -> List[SportsbookSnapshot]:
     Uses group endpoint as primary to get comprehensive market coverage.
     Group endpoint provides all bet offers including props, game props, etc.
     """
-    async with httpx.AsyncClient(timeout=30, headers=HEADERS) as client:
+    async with httpx.AsyncClient(timeout=30, headers=HEADERS, **get_client_kwargs("EU")) as client:
         # Use group endpoint as primary - provides comprehensive market coverage
         # including props, game props, team props, and alternate lines
         events = await fetch_events_group(sport, client)

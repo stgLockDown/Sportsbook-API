@@ -8,6 +8,7 @@ Supports 14+ sports including basketball, football, hockey, baseball, soccer,
 tennis, boxing, MMA, cricket, rugby, darts, table tennis, volleyball, handball.
 """
 import httpx
+from ._proxy import get_client_kwargs
 import asyncio
 import logging
 from datetime import datetime, timezone
@@ -68,7 +69,7 @@ async def fetch_sport(sport: str) -> List[SportsbookSnapshot]:
 
     events = []
     try:
-        async with httpx.AsyncClient(timeout=60, headers=HEADERS) as client:
+        async with httpx.AsyncClient(timeout=60, headers=HEADERS, **get_client_kwargs("UK")) as client:
             # Step 1: Get upcoming events
             params = {
                 "type": event_type,

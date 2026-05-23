@@ -14,6 +14,7 @@ Strategy:
 """
 
 import httpx
+from ._proxy import get_client_kwargs
 import asyncio
 import logging
 from collections import defaultdict
@@ -202,7 +203,7 @@ def _parse_kalshi_market(market: dict) -> Optional[Market]:
 
 async def fetch_sport(sport: str) -> List[SportsbookSnapshot]:
     """Fetch Kalshi sports markets, grouped by event."""
-    async with httpx.AsyncClient(timeout=25, headers=HEADERS) as client:
+    async with httpx.AsyncClient(timeout=25, headers=HEADERS, **get_client_kwargs("US")) as client:
         markets_raw = await _fetch_all_sports_markets(client, sport)
         
         if not markets_raw:

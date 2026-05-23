@@ -18,6 +18,7 @@ import httpx
 from datetime import datetime, timezone
 from typing import List, Optional
 from .models import SportsbookSnapshot, Event, Market, Outcome, MarketType
+from ._proxy import get_client_kwargs
 
 KAMBI_BASE = "https://eu-offering-api.kambicdn.com/offering/v2018/comeon"
 
@@ -359,7 +360,7 @@ async def fetch_sport(sport_key: str) -> List[SportsbookSnapshot]:
     # Step 1: Get event list
     list_url = f"{KAMBI_BASE}/listView/{kambi_path}.json?lang=en_GB&market=GB&useCombined=true"
 
-    async with httpx.AsyncClient(timeout=20.0, follow_redirects=True) as client:
+    async with httpx.AsyncClient(timeout=20.0, follow_redirects=True, **get_client_kwargs("EU")) as client:
         try:
             resp = await client.get(list_url, headers=HEADERS)
             if resp.status_code != 200:
