@@ -58,10 +58,28 @@ async def lifespan(app: FastAPI):
     """Start server immediately, pre-fetch in background."""
     import asyncio
     print("[API] Starting up v10.0.0 — 47 sportsbooks, 24 sports")
+
+    # Start the DraftKings Akamai-bypass cookie priming loop.
+    # This launches a headless Chromium and re-primes every 5 min.
+    # Failure here is non-fatal — the DK scraper falls back to returning [].
+    dk_session = None
+    try:
+        from scrapers import _dk_session
+        _dk_session.start_background()
+        dk_session = _dk_session
+        print("[API] DK Akamai-bypass session started.")
+    except Exception as e:
+        print(f"[API] DK session failed to start (DK scraping disabled): {e}")
+
     task = asyncio.create_task(_prefetch_background())
     print("[API] Startup complete. Pre-fetching in background...")
     yield
     task.cancel()
+    if dk_session is not None:
+        try:
+            await dk_session.shutdown()
+        except Exception:
+            pass
     print("[API] Shutting down.")
 
 
@@ -390,6 +408,27 @@ async def get_live_odds(sport: str):
 @app.get("/cache/stats")
 async def cache_stats():
     return cache.stats()
+
+
+@app.get("/status/dk-session")
+async def dk_session_status():
+    """Status of the DraftKings Akamai-bypass cookie session."""
+    try:
+        from scrapers import _dk_session
+        return _dk_session.status()
+    except Exception as e:
+        return {"error": str(e), "available": False}
+
+
+@app.post("/admin/dk-prime")
+async def dk_prime():
+    """Manually trigger a DK cookie re-prime."""
+    try:
+        from scrapers import _dk_session
+        ok = await _dk_session.prime(force=True)
+        return {"primed": ok, "status": _dk_session.status()}
+    except Exception as e:
+        return {"primed": False, "error": str(e)}
 
 
 @app.post("/cache/clear")
