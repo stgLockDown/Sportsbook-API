@@ -71,6 +71,18 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         print(f"[API] DK session failed to start (DK scraping disabled): {e}")
 
+    # Start the bet365 Cloudflare-bypass cookie priming loop. Same pattern
+    # as DK; targets nj.bet365.com via Decodo US-RCN. Failure is non-fatal —
+    # the bet365 direct scraper falls back to ActionNetwork in the aggregator.
+    b365_session = None
+    try:
+        from scrapers import _b365_session
+        _b365_session.start_background()
+        b365_session = _b365_session
+        print("[API] bet365 Cloudflare-bypass session started.")
+    except Exception as e:
+        print(f"[API] bet365 session failed to start (bet365 falls back to AN): {e}")
+
     task = asyncio.create_task(_prefetch_background())
     print("[API] Startup complete. Pre-fetching in background...")
     yield
@@ -78,6 +90,11 @@ async def lifespan(app: FastAPI):
     if dk_session is not None:
         try:
             await dk_session.shutdown()
+        except Exception:
+            pass
+    if b365_session is not None:
+        try:
+            await b365_session.shutdown()
         except Exception:
             pass
     print("[API] Shutting down.")
@@ -427,6 +444,27 @@ async def dk_prime():
         from scrapers import _dk_session
         ok = await _dk_session.prime(force=True)
         return {"primed": ok, "status": _dk_session.status()}
+    except Exception as e:
+        return {"primed": False, "error": str(e)}
+
+
+@app.get("/status/b365-session")
+async def b365_session_status():
+    """Status of the bet365 Cloudflare-bypass cookie session."""
+    try:
+        from scrapers import _b365_session
+        return _b365_session.status()
+    except Exception as e:
+        return {"error": str(e), "available": False}
+
+
+@app.post("/admin/b365-prime")
+async def b365_prime():
+    """Manually trigger a bet365 cookie re-prime."""
+    try:
+        from scrapers import _b365_session
+        ok = await _b365_session.prime(force=True)
+        return {"primed": ok, "status": _b365_session.status()}
     except Exception as e:
         return {"primed": False, "error": str(e)}
 
