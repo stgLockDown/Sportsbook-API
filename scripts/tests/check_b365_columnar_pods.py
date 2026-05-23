@@ -29,10 +29,15 @@ def make_record(rtype, **fields):
 # that left teams blank.
 records = [
     # Two fixture-PAs (no CL anchoring — bug case)
+    # We include L3="NBA" to make these test cases match real bet365
+    # NBA pods (most do carry an L3 league field). The empty-L3
+    # case is exercised separately via the NA-only orphan test below.
     make_record("PA", FI="194832551", NA="NY Knicks", N2="CLE Cavaliers",
-                FD="NY Knicks v CLE Cavaliers", BC="20260524000000"),
+                FD="NY Knicks v CLE Cavaliers", BC="20260524000000",
+                L3="NBA"),
     make_record("PA", FI="194832552", NA="LA Lakers", N2="GS Warriors",
-                FD="LA Lakers v GS Warriors", BC="20260524023000"),
+                FD="LA Lakers v GS Warriors", BC="20260524023000",
+                L3="NBA"),
     # Selection-style MAs with CL=18 + OD set (this is what production
     # was producing, hitting the line-421 MA-OD branch).
     make_record("MA", CL="18", FI="194832551", NA="NY Knicks", OD="6/5",
@@ -139,3 +144,74 @@ assert labels == ["CLE Cavaliers", "NY Knicks"], f"outcome labels should be team
 print("  NA-only + ML team recovery: OK")
 
 print("\n*** ALL 3 TEST CASES PASSED ***")
+
+# ─── _league_matches() unit matrix ─────────────────────────────────
+# Disambiguation table for sports that share a CL (e.g. CL=18 is
+# shared by NBA / NCAAB / WNBA / virtual basketball; CL=12 by NFL /
+# NCAAF). The filter must accept "own" leagues + orphan tiles +
+# generic class fallback, and reject positively-labelled siblings.
+print("\n--- _league_matches() disambiguation matrix ---")
+
+# (league, sport, target_cl, expected) tuples
+_match_cases = [
+    # NBA accepts NBA-tagged leagues
+    ("NBA",                 "nba",   18, True),
+    ("NBA Playoffs",        "nba",   18, True),
+    ("NBA Summer League",   "nba",   18, True),
+    # NBA rejects positively-labelled siblings under CL=18
+    ("WNBA",                "nba",   18, False),
+    ("NCAA Basketball",     "nba",   18, False),
+    ("College Basketball",  "nba",   18, False),
+    ("CBB",                 "nba",   18, False),
+    ("B-EBASKBLITZ4X5",     "nba",   18, False),  # virtual basketball
+    # NBA accepts orphans (empty + generic class fallback)
+    ("",                    "nba",   18, True),
+    ("Basketball",          "nba",   18, True),
+
+    # NCAAB: many synonyms, must reject NBA / WNBA
+    ("NCAA Basketball",     "ncaab", 18, True),
+    ("NCAAB",               "ncaab", 18, True),
+    ("College Basketball",  "ncaab", 18, True),
+    ("CBB",                 "ncaab", 18, True),
+    ("NBA",                 "ncaab", 18, False),
+    ("WNBA",                "ncaab", 18, False),
+    ("Basketball",          "ncaab", 18, True),  # generic fallback OK
+
+    # WNBA: must NOT match "NBA" substring
+    ("WNBA",                "wnba",  18, True),
+    ("NBA",                 "wnba",  18, False),
+    ("NCAA Basketball",     "wnba",  18, False),
+
+    # NFL / NCAAF share CL=12
+    ("NFL",                 "nfl",   12, True),
+    ("NCAA Football",       "nfl",   12, False),
+    ("CFB",                 "nfl",   12, False),
+    ("Football",            "nfl",   12, True),  # generic fallback OK
+    ("NCAA Football",       "ncaaf", 12, True),
+    ("NFL",                 "ncaaf", 12, False),
+
+    # MMA accepts "UFC" / "Bellator" / "PFL" promotions
+    ("UFC 300",             "mma",   9,  True),
+    ("Bellator MMA",        "mma",   9,  True),
+    ("PFL",                 "mma",   9,  True),
+    ("Boxing",              "mma",   9,  False),
+
+    # Sports not in SPORT_LEAGUE_FILTER accept everything (legacy)
+    ("KHL",                 "nhl",   17, True),
+    ("",                    "mlb",   16, True),
+    ("Anything",            "tennis", 13, True),
+]
+_failures = []
+for league, sport, target_cl, expected in _match_cases:
+    actual = bet365._league_matches(league, sport, target_cl=target_cl)
+    status = "OK" if actual == expected else "FAIL"
+    print(f"  [{status}] _league_matches({league!r:30s}, sport={sport!r:7s}, cl={target_cl}) = {actual} (expected {expected})")
+    if actual != expected:
+        _failures.append((league, sport, target_cl, expected, actual))
+
+if _failures:
+    print(f"\n{len(_failures)} _league_matches case(s) failed")
+    raise AssertionError(f"_league_matches matrix failed: {_failures}")
+
+print(f"  All {len(_match_cases)} _league_matches cases OK")
+print("\n*** ALL TESTS PASSED ***")

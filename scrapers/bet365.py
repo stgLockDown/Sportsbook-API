@@ -77,6 +77,96 @@ SPORT_CL: Dict[str, int] = {
     "f1":     10,
 }
 
+# Per-sport league-name filters. Multiple sports share the same CL
+# (NBA / NCAAB / WNBA all = CL=18; NFL / NCAAF both = CL=12), so we
+# additionally filter on the L3 / league field captured from each
+# fixture record. The filter is applied case-insensitively against
+# substring matches in the recorded league string.
+#
+# When a sport has no entry here, the CL filter alone is used (i.e.
+# every league within the class is accepted — current behaviour for
+# soccer/tennis/etc. where bet365 doesn't sub-divide by league).
+#
+# Sentinel "*" means "accept everything in this CL" (used for sports
+# we want all leagues from). Order in the tuple does not matter.
+SPORT_LEAGUE_FILTER: Dict[str, Tuple[str, ...]] = {
+    # Basketball (CL=18) splits into NBA / NCAAB / WNBA.
+    # We accept the explicit league name AND reject futures/virtual
+    # buckets like "Basketball" (futures), "B-EBASKBLITZ4X5" (virtual).
+    "nba":    ("nba",),
+    "ncaab":  ("ncaab", "ncaa", "college basketball", "cbb"),
+    "wnba":   ("wnba",),
+    # Football (CL=12) splits into NFL / NCAAF.
+    "nfl":    ("nfl",),
+    "ncaaf":  ("ncaaf", "ncaa", "college football", "cfb"),
+    # Combat (CL=9) splits into boxing / MMA.
+    "boxing": ("boxing",),
+    "mma":    ("mma", "ufc", "bellator", "pfl"),
+}
+
+
+def _league_matches(league: str, sport: str, target_cl: Optional[int] = None) -> bool:
+    """Return True iff `league` should be accepted for `sport`.
+
+    A sport with no SPORT_LEAGUE_FILTER entry accepts every league in
+    its CL class (legacy behaviour). A sport with an entry accepts:
+      * any league whose lowercase rep contains a configured needle
+        (with word-boundary checking so "nba" doesn't match "wnba"); OR
+      * an empty / missing league field — these are orphan pods that
+        the CL filter (target_cl) has already validated, and we'd
+        rather keep an unlabelled fixture than drop it; OR
+      * a league exactly equal to the generic class label
+        (CL_NAME[target_cl], e.g. "Basketball" for CL=18). This is the
+        fallback we ourselves write into `meta["league"]` when no L3
+        was captured, so it's the same case as "empty league" above —
+        accept and trust the CL filter.
+
+    The strict-rejection case is:
+      * league set to a known *positively-labelled* sibling league
+        (e.g. "WNBA" when sport=nba, "NCAA Basketball" when sport=nba,
+        "B-EBASKBLITZ4X5" virtual league) — these would otherwise
+        pollute the per-sport view because they share CL with the
+        target sport.
+    """
+    needles = SPORT_LEAGUE_FILTER.get(sport)
+    if not needles:
+        return True
+    if not league:
+        # No league string captured. Trust the CL filter (target_cl)
+        # that already accepted this fixture; keep it.
+        return True
+
+    # Treat the generic class fallback ("Basketball", "Football", ...)
+    # as equivalent to an empty league. We populate this ourselves when
+    # L3 is missing, so it carries no real disambiguation info.
+    if target_cl is not None:
+        generic = CL_NAME.get(target_cl)
+        if generic and league.strip().lower() == generic.lower():
+            return True
+
+    league_lc = league.lower()
+
+    # Word-boundary substring match.
+    def _word_match(needle: str) -> bool:
+        idx = 0
+        while True:
+            pos = league_lc.find(needle, idx)
+            if pos < 0:
+                return False
+            before_ok = pos == 0 or not league_lc[pos - 1].isalpha()
+            after_idx = pos + len(needle)
+            after_ok = after_idx == len(league_lc) or not league_lc[after_idx].isalpha()
+            if before_ok and after_ok:
+                return True
+            idx = pos + 1
+
+    if any(_word_match(n) for n in needles):
+        return True
+
+    # League is set but doesn't match any positive needle. Reject.
+    return False
+
+
 # Reverse mapping for league naming
 CL_NAME: Dict[int, str] = {
     18: "Basketball",
@@ -627,11 +717,20 @@ def _build_events_from_records(
             break
 
     # Materialize Events. Drop any fixture without odds.
+    # Apply per-sport league filter so e.g. /odds/ncaab/bet365 doesn't
+    # return NBA/WNBA/virtual-basketball events that share CL=18.
     out: List[Event] = []
+    rejected_by_league_filter = 0
     for fi, meta in fixtures.items():
         markets_dict = fix_markets.get(fi)
         if not markets_dict:
             continue
+
+        league = meta.get("league") or ""
+        if not _league_matches(league, sport, target_cl=target_cl):
+            rejected_by_league_filter += 1
+            continue
+
         markets: List[Market] = []
         for (mname, mtype), outs in markets_dict.items():
             if outs:
@@ -651,6 +750,13 @@ def _build_events_from_records(
             is_live=meta.get("live", False),
             markets=markets,
         ))
+    if rejected_by_league_filter and sport in SPORT_LEAGUE_FILTER:
+        logger.info(
+            "bet365 sport=%s: filtered out %d fixtures whose league did not "
+            "match %s (multi-league CL=%d disambiguation)",
+            sport, rejected_by_league_filter,
+            SPORT_LEAGUE_FILTER[sport], target_cl,
+        )
     return out
 
 
