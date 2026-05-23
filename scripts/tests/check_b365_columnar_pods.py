@@ -109,3 +109,33 @@ assert e.away_team == "Miami Heat", f"got {e.away_team!r}"
 print("  EV-context shape: OK")
 
 print("\nALL TESTS PASSED ✓")
+
+# ─── Additional: NA-only "Market: Selection" (no MN field) shape ───
+# This is the production shape that PR #7 v1 missed: MA records have
+# the full label in NA with no MN, AND the FI has no fixture-PA at all.
+# We expect the parser to (a) split NA into market/selection, and
+# (b) recover home/away from the ML outcomes via post-processing.
+print("\n--- Verifying NA-only label + ML team recovery ---")
+na_only = [
+    # No fixture-PA at all for FI=300000001 (orphan pod tile)
+    make_record("MA", CL="18", FI="300000001", NA="Money Line: NY Knicks", OD="6/5"),
+    make_record("MA", CL="18", FI="300000001", NA="Money Line: CLE Cavaliers", OD="5/7"),
+]
+blob3 = "|".join(na_only)
+parsed3 = bet365._parse_blob(blob3)
+events3 = bet365._build_events_from_records(parsed3, sport="nba", target_cl=18)
+print(f"events: {len(events3)}")
+assert len(events3) == 1
+e3 = events3[0]
+print(f"  {e3.event_id}: home={e3.home_team!r} away={e3.away_team!r} markets={[(m.name, len(m.outcomes)) for m in e3.markets]}")
+assert e3.home_team in ("CLE Cavaliers", "NY Knicks"), f"home_team should be recovered, got {e3.home_team!r}"
+assert e3.away_team in ("CLE Cavaliers", "NY Knicks"), f"away_team should be recovered, got {e3.away_team!r}"
+assert e3.home_team != e3.away_team
+ml_markets = [m for m in e3.markets if m.name == "Money Line"]
+assert len(ml_markets) == 1, f"expected single 'Money Line' market, got {[m.name for m in e3.markets]}"
+assert len(ml_markets[0].outcomes) == 2
+labels = sorted(o.name for o in ml_markets[0].outcomes)
+assert labels == ["CLE Cavaliers", "NY Knicks"], f"outcome labels should be team names, got {labels}"
+print("  NA-only + ML team recovery: OK")
+
+print("\n*** ALL 3 TEST CASES PASSED ***")
