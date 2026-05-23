@@ -464,14 +464,25 @@ def _build_events_from_records(
                 # MN values often look like "Money Line: NY Knicks" or
                 # "Spread: NY Knicks -3.5" — strip the per-selection suffix
                 # so all selections in the same market merge together.
-                raw_market_name = fields.get("MN") or "Special"
-                if ":" in raw_market_name:
+                # Some pods omit MN entirely and put the full label in NA;
+                # in that case the same parsing applies to ma_name to
+                # keep market_name clean and use the suffix as outcome label.
+                raw_market_name = fields.get("MN") or ""
+                outcome_label = ma_name
+                if raw_market_name and ":" in raw_market_name:
                     market_name = raw_market_name.split(":", 1)[0].strip()
-                else:
+                elif raw_market_name:
                     market_name = raw_market_name
+                elif ma_name and ":" in ma_name:
+                    # NA carries full "Market: Selection" — split it.
+                    head, tail = ma_name.split(":", 1)
+                    market_name = head.strip()
+                    outcome_label = tail.strip() or ma_name
+                else:
+                    market_name = ma_name or "Special"
                 mtype = _classify_market(market_name)
                 point = _parse_point(fields.get("HA")) or _parse_point(fields.get("HD"))
-                _add_outcome(fi, market_name, mtype, ma_name, am, dec, point)
+                _add_outcome(fi, market_name, mtype, outcome_label, am, dec, point)
                 current_market_name = None
                 current_market_side = None
                 continue
@@ -578,6 +589,42 @@ def _build_events_from_records(
             _add_outcome(fi, mname, mtype, label, am, dec, point)
 
         # MG / PD / PS / XL \u2014 structural, ignored.
+
+    # ── Post-processing: recover home/away for orphan fixtures ──
+    # bet365 splits same matchup across multiple FIs (one per pod tile).
+    # The ML pod's FI typically has no fixture-PA, only MA-OD selections
+    # whose ma_name is the team name. If a fixture has no home/away but
+    # has a Money-Line-classified market with exactly 2 outcomes whose
+    # labels look like team names, use them.
+    for fi, meta in fixtures.items():
+        if meta.get("home") and meta.get("away"):
+            continue
+        markets_dict = fix_markets.get(fi)
+        if not markets_dict:
+            continue
+        # Find a moneyline market with exactly 2 outcomes
+        for (mname, mtype), outs in markets_dict.items():
+            if mtype != "moneyline" or len(outs) != 2:
+                continue
+            label_a = (outs[0].name or "").strip()
+            label_b = (outs[1].name or "").strip()
+            # Heuristic: both labels non-empty, neither contains digits
+            # like "+150" / "Over 5.5" / a colon (compound label).
+            if not (label_a and label_b):
+                continue
+            if any(ch.isdigit() for ch in label_a + label_b):
+                continue
+            if ":" in label_a or ":" in label_b:
+                continue
+            # American odds: home is the *favorite-or-listed-second* per
+            # bet365 convention, but we don't know order. Conservative:
+            # treat outcome[0] as away, outcome[1] as home (matches the
+            # "Away @ Home" description format used elsewhere).
+            meta["away"] = meta.get("away") or label_a
+            meta["home"] = meta.get("home") or label_b
+            if not meta.get("desc"):
+                meta["desc"] = f"{label_a} @ {label_b}"
+            break
 
     # Materialize Events. Drop any fixture without odds.
     out: List[Event] = []
