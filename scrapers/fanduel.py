@@ -1,215 +1,350 @@
 """
-FanDuel Sportsbook Scraper - Comprehensive Market Coverage Upgrade
-Directly hits FanDuel's public sportsbook API for odds data.
-Enhanced to capture and properly classify ALL available markets.
-"""
+FanDuel Sportsbook Scraper.
 
-import httpx
+Hits FanDuel's public state-tenant SB API for odds data. The same payload
+shape is served from each licensed-state subdomain (IL, NJ, PA, MI, …);
+we use IL as the primary tenant and fall back to NJ/PA on failure for
+redundancy.
+
+Endpoint: GET sbapi.{state}.sportsbook.fanduel.com/api/content-managed-page
+  ?page=CUSTOM&customPageId={sport_slug}&_ak={api_key}
+
+Returns a JSON document with `attachments.events` and `attachments.markets`
+keyed by id. We join markets to events via `eventId` and parse runner
+prices into our normalized Outcome / Market / Event shape.
+
+Routes through the same Decodo US proxy used by DK and bet365 (since the
+FD API is geofenced to US states).
+"""
+import asyncio
+import logging
+import random
 from datetime import datetime, timezone
 from typing import List, Optional
+
+import httpx
+
 from .models import (
-    SportsbookSnapshot, Event, Market, Outcome, MarketType
+    Event, Market, MarketType, Outcome, SportsbookSnapshot,
 )
+
+logger = logging.getLogger(__name__)
 
 SPORTSBOOK_NAME = "FanDuel"
 
-BASE_URL = "https://sbapi.il.sportsbook.fanduel.com/api/content-managed-page"
+# Tenant fallback chain. IL is primary because (a) it's the largest state
+# tenant by event volume in our observed traffic and (b) it has the longest
+# uptime track record. If IL fails, fall through to NJ then PA.
+TENANTS = [
+    "https://sbapi.il.sportsbook.fanduel.com/api/content-managed-page",
+    "https://sbapi.nj.sportsbook.fanduel.com/api/content-managed-page",
+    "https://sbapi.pa.sportsbook.fanduel.com/api/content-managed-page",
+]
+
+# FanDuel public API key. Same value across tenants; rotated rarely (last
+# observed change Q3 2024).
 API_KEY = "FhMFpcPWXMeyZxOx"
 
 HEADERS = {
-    "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
+    "User-Agent": (
+        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
+        "AppleWebKit/537.36 (KHTML, like Gecko) "
+        "Chrome/122.0.0.0 Safari/537.36"
+    ),
     "Accept": "application/json",
+    "Accept-Language": "en-US,en;q=0.9",
+    "Referer": "https://sportsbook.fanduel.com/",
+    "Origin": "https://sportsbook.fanduel.com",
 }
 
-# FanDuel page IDs -> our normalized sport/league names
+# Per-attempt timeout. Total max wall-clock for a fetch_sport call:
+# 3 attempts × 3 tenants × REQUEST_TIMEOUT = up to ~45s, but with
+# exponential backoff between attempts that's more like ~30s typical.
+REQUEST_TIMEOUT = 8.0
+MAX_ATTEMPTS_PER_TENANT = 2
+
+# FanDuel customPageId → our normalized sport / league.
 SPORT_MAP = {
-    "nfl": {"sport": "Football", "league": "NFL"},
-    "nba": {"sport": "Basketball", "league": "NBA"},
-    "mlb": {"sport": "Baseball", "league": "MLB"},
-    "nhl": {"sport": "Hockey", "league": "NHL"},
-    "ncaaf": {"sport": "Football", "league": "NCAAF"},
-    "ncaab": {"sport": "Basketball", "league": "NCAAB"},
-    "wnba": {"sport": "Basketball", "league": "WNBA"},
-    "mls": {"sport": "Soccer", "league": "MLS"},
-    "epl": {"sport": "Soccer", "league": "EPL"},
-    "champions-league": {"sport": "Soccer", "league": "Champions League"},
-    "golf": {"sport": "Golf", "league": "PGA"},
-    "ufc": {"sport": "MMA", "league": "UFC"},
-    "boxing": {"sport": "Boxing", "league": "Boxing"},
-    "tennis": {"sport": "Tennis", "league": "Tennis"},
+    "nfl":              {"sport": "Football",   "league": "NFL"},
+    "nba":              {"sport": "Basketball", "league": "NBA"},
+    "mlb":              {"sport": "Baseball",   "league": "MLB"},
+    "nhl":              {"sport": "Hockey",     "league": "NHL"},
+    "ncaaf":            {"sport": "Football",   "league": "NCAAF"},
+    "ncaab":            {"sport": "Basketball", "league": "NCAAB"},
+    "wnba":             {"sport": "Basketball", "league": "WNBA"},
+    "mls":              {"sport": "Soccer",     "league": "MLS"},
+    "epl":              {"sport": "Soccer",     "league": "EPL"},
+    "champions-league": {"sport": "Soccer",     "league": "Champions League"},
+    "golf":             {"sport": "Golf",       "league": "PGA"},
+    "ufc":              {"sport": "MMA",        "league": "UFC"},
+    "boxing":           {"sport": "Boxing",     "league": "Boxing"},
+    "tennis":           {"sport": "Tennis",     "league": "Tennis"},
 }
+
+
+# ─── Market classification ─────────────────────────────────────────────
+#
+# Order matters. We check core market types first (moneyline, spread,
+# total) so that a generic "Total Points" market doesn't get hijacked
+# by a generic "points" keyword that's also used for player props.
+
+# FanDuel marketType codes that are unambiguously core game markets.
+# (Trumps any name-keyword match.)
+_CORE_TYPE_CODES = {
+    "MONEY_LINE":                MarketType.MONEYLINE,
+    "MATCH_BETTING":             MarketType.MONEYLINE,
+    "MATCH_HANDICAP_(2-WAY)":    MarketType.SPREAD,
+    "MATCH_HANDICAP":            MarketType.SPREAD,
+    "POINT_SPREAD":              MarketType.SPREAD,
+    "RUN_LINE":                  MarketType.SPREAD,
+    "PUCK_LINE":                 MarketType.SPREAD,
+    "TOTAL_POINTS_(OVER/UNDER)": MarketType.TOTAL,
+    "TOTAL_POINTS":              MarketType.TOTAL,
+    "TOTAL_RUNS":                MarketType.TOTAL,
+    "TOTAL_GOALS":               MarketType.TOTAL,
+    "TOTAL":                     MarketType.TOTAL,
+    "OVER_UNDER":                MarketType.TOTAL,
+}
+
+# Player-prop indicators (names contain these AND don't match core type).
+# Note: prefer leading-word patterns where possible to avoid generic
+# substrings like "to score" colliding with game props ("Both Teams to
+# Score" → game_prop, not player_prop).
+_PLAYER_PROP_KEYWORDS = (
+    "player ", " player",
+    "anytime goalscorer", "first goalscorer", "last goalscorer",
+    "anytime touchdown scorer", "first touchdown scorer",
+    "first basket", "first 3-pointer",
+    "passing yards", "rushing yards", "receiving yards",
+    "passing tds", "rushing tds", "receiving tds",
+    "passing touchdowns", "rushing touchdowns", "receiving touchdowns",
+    "completions", "interceptions thrown", "qb sacks",
+    "tackles + assists", "first downs",
+    "points + rebounds", "points + assists", "rebounds + assists",
+    "p+r+a", "double double", "triple double",
+    "made threes", "three pointers made", "3pt made",
+    "blocks ", "steals ", "turnovers ",
+    "total bases", "total hits ", "home runs ", "rbis", "strikeouts pitched",
+    "shots on goal", "saves ",
+    " aces", "double faults", "break points won",
+    " - ",  # FD player-prop name pattern: "<Player> - <Stat>"
+    # MLB FD-specific player-prop name patterns ("To Hit A Home Run",
+    # "To Record A Hit", "To Record 2+ Total Bases", …):
+    "to hit a", "to record",
+)
+
+# Team-prop keywords (team-level, but not core h2h/spread/total).
+_TEAM_PROP_KEYWORDS = (
+    "team to score first", "team to score last", "team to score most",
+    "team total", "team points",
+    "first team to ", "race to ", "winning margin",
+    "highest scoring quarter", "highest scoring half",
+)
+
+# Game-prop keywords (game-state markets).
+_GAME_PROP_KEYWORDS = (
+    "both teams to score", "btts",
+    "draw no bet", "double chance",
+    "will the game go to overtime", "go to ot",
+    "first half", "second half", "first quarter", "second quarter",
+    "third quarter", "fourth quarter",
+    "first period", "second period", "third period",
+    "first inning", "5 innings", "first 5 innings",
+    "exact score", "correct score",
+)
+
+# Futures keywords.
+_FUTURES_KEYWORDS = (
+    "to win the", "outright", "championship", "mvp",
+    "rookie of the year", "coach of the year",
+    "season wins", "regular season wins", "win total",
+    "world series", "super bowl", "stanley cup",
+    "to make the playoffs", "to miss the playoffs",
+    "specials", "futures",
+)
 
 
 def _classify_market(market_type_raw: str, market_name: str) -> MarketType:
+    """Categorize a FanDuel market.
+
+    Decision order:
+      1. Core type code (MONEY_LINE, TOTAL_POINTS_…, …) — definitive.
+      2. FD typeCode prefix patterns (PLAYER_, _PLAYER_, …) — strong signal.
+      3. Futures keywords (typically standalone tournament events).
+      4. Player-prop keywords (highest specificity for non-core).
+      5. Team-prop keywords.
+      6. Game-prop keywords.
+      7. Fallback to MarketType.OTHER.
     """
-    Enhanced market classification for FanDuel.
-    Properly detects player props, team props, game props, and alternate lines.
-    """
-    name_lower = market_name.lower()
-    type_lower = market_type_raw.lower() if market_type_raw else ""
-    
-    # Combine market type and name for better classification
-    combined_text = f"{name_lower} {type_lower}"
-    
-    # PLAYER PROPS - Detect player-specific betting markets
-    player_prop_keywords = [
-        # Basketball props
-        'to score', 'to record', 'points', 'rebounds', 'assists', 'threes', 'made threes',
-        'three pointers', 'three point', '3-point', '3 point', 'blocks', 'steals',
-        'turnovers', 'double double', 'triple double', 'points + rebounds', 'points + assists',
-        'rebounds + assists', 'p+r', 'p+a', 'r+a', 'points/rebounds/assists',
-        # Football props
-        'passing yards', 'passing touchdowns', 'rushing yards', 'rushing touchdowns',
-        'receiving yards', 'receiving touchdowns', 'completions', 'interceptions',
-        'sacks', 'tackles', 'tackles + assists', 'first downs', 'touchdowns scored',
-        # Baseball props
-        'total bases', 'hits', 'home runs', 'runs batted in', 'strikeouts',
-        'hits allowed', 'runs allowed', 'innings pitched', 'strikeouts thrown',
-        # Hockey props
-        'goals', 'shots on goal', 'saves', 'first period goal', 'anytime',
-        'last goal', 'goals scored',
-        # Tennis props
-        'aces', 'double faults', 'games won', 'sets won', 'break points',
-        # General player indicators
-        'player', 'performance', 'to make', 'to be', 'to have',
-    ]
-    
-    if any(keyword in combined_text for keyword in player_prop_keywords):
-        return MarketType.PLAYER_PROP
-    
-    # TEAM PROPS - Team-specific performance markets
-    # Map to PLAYER_PROP since they're both prop bets
-    team_prop_keywords = [
-        'team to score', 'team to score first', 'team to score last',
-        'team to score most', 'team total', 'team points',
-        'first basket', 'first field goal', 'first touchdown',
-        'highest scoring quarter', 'highest scoring half',
-        'team with most', 'team leads at', 'race to',
-        'to win by', 'winning margin', 'exact score',
-        'quarter', 'period', 'inning', 'half',
-    ]
-    
-    if any(keyword in combined_text for keyword in team_prop_keywords):
-        return MarketType.PLAYER_PROP  # Map to PLAYER_PROP for now
-    
-    # GAME PROPS - Game-specific markets
-    # Map to OTHER for now
-    game_prop_keywords = [
-        'alternatives', 'alternate', 'both teams score', 'btts',
-        'draw no bet', 'double chance', 'total points', 'total goals',
-        'total runs', 'total score', 'will the game go to',
-        'overtime', 'first to', 'last to', 'special', 'novelty',
-    ]
-    
-    if any(keyword in combined_text for keyword in game_prop_keywords):
-        return MarketType.OTHER  # Map to OTHER for now
-    
-    # CORE MARKETS
-    if "moneyline" in name_lower or "money line" in name_lower or "match_betting" in type_lower:
+    name_lc = (market_name or "").lower()
+    type_uc = (market_type_raw or "").upper()
+
+    # 1. Core type code — trumps name. This fixes "Total Points" being
+    # mis-classified as PLAYER_PROP because of the bare "points" keyword.
+    if type_uc in _CORE_TYPE_CODES:
+        return _CORE_TYPE_CODES[type_uc]
+
+    # Some core markets only have the name to go on (no useful type).
+    if "moneyline" in name_lc or "money line" in name_lc:
         return MarketType.MONEYLINE
-    elif "spread" in name_lower or "handicap" in name_lower:
+    if "spread" in name_lc or "handicap" in name_lc or "run line" in name_lc or "puck line" in name_lc:
         return MarketType.SPREAD
-    elif "total" in name_lower or "over/under" in name_lower or "over_under" in type_lower:
+    if name_lc.startswith("total ") or "over/under" in name_lc or "(over/under)" in name_lc:
+        # Disambiguate: if a player name is in the title, it's a prop
+        # ("LeBron James - Total Points"). Detect by checking for
+        # title-cased multi-word substrings that aren't team names.
+        if "player" in name_lc or " - " in (market_name or ""):
+            return MarketType.PLAYER_PROP
         return MarketType.TOTAL
-    elif "future" in name_lower or "outright" in name_lower or "winner" in name_lower or "championship" in name_lower:
+
+    # 2. FD type-code prefix signals.
+    if "PLAYER_" in type_uc or type_uc.endswith("_SPECIALS"):
+        return MarketType.PLAYER_PROP
+    if type_uc.endswith("_FUTURES") or "_AWARDS" in type_uc or "_MVP" in type_uc:
         return MarketType.FUTURES
-    
+    if type_uc.endswith("_TEAM_TOTAL") or "_TEAM_" in type_uc:
+        return MarketType.TEAM_PROP
+
+    # 3. Futures.
+    if any(kw in name_lc for kw in _FUTURES_KEYWORDS):
+        return MarketType.FUTURES
+
+    # 4. Player props.
+    if any(kw in name_lc for kw in _PLAYER_PROP_KEYWORDS):
+        return MarketType.PLAYER_PROP
+
+    # 5. Team props.
+    if any(kw in name_lc for kw in _TEAM_PROP_KEYWORDS):
+        return MarketType.TEAM_PROP
+
+    # 6. Game props.
+    if any(kw in name_lc for kw in _GAME_PROP_KEYWORDS):
+        return MarketType.GAME_PROP
+
     return MarketType.OTHER
 
 
 def _safe_american_odds(raw_value) -> Optional[int]:
-    """Safely parse American odds from FanDuel - can be int or str."""
+    """Coerce FanDuel's mixed odds representations to int American odds.
+
+    FanDuel returns:
+      * `int` directly for most markets
+      * `float` occasionally
+      * the string "EVEN" for +100
+      * a string like "+150" or "-110"
+    """
     if raw_value is None:
         return None
+    if isinstance(raw_value, bool):
+        return None  # guard against True/False being treated as 1/0
     if isinstance(raw_value, int):
         return raw_value
     if isinstance(raw_value, float):
         return int(raw_value)
     if isinstance(raw_value, str):
-        if raw_value == "EVEN":
+        v = raw_value.strip().upper()
+        if v == "EVEN" or v == "EVS":
             return 100
         try:
-            return int(raw_value.replace("+", ""))
+            return int(v.replace("+", ""))
         except (ValueError, TypeError):
             return None
     return None
 
 
+def _parse_start_time(raw: str) -> Optional[datetime]:
+    if not raw:
+        return None
+    try:
+        return datetime.fromisoformat(raw.replace("Z", "+00:00"))
+    except (ValueError, TypeError):
+        return None
+
+
+def _split_event_name(ev_name: str) -> tuple:
+    """Split FD event name into (away, home).
+
+    FD uses "Away @ Home" for US sports and "Home v Away" for soccer.
+    Returns ("", ev_name) for futures/specials with no separator.
+    """
+    if not ev_name:
+        return ("", "")
+    if " @ " in ev_name:
+        away, home = ev_name.split(" @ ", 1)
+        return away.strip(), home.strip()
+    if " v " in ev_name:
+        # FD soccer convention: "Home v Away"
+        home, away = ev_name.split(" v ", 1)
+        return away.strip(), home.strip()
+    if " vs " in ev_name:
+        home, away = ev_name.split(" vs ", 1)
+        return away.strip(), home.strip()
+    return ("", "")
+
+
 def _parse_response(data: dict, sport: str, league: str) -> List[Event]:
-    """
-    Parse FanDuel API response into Event models.
-    Captures ALL available markets with enhanced classification.
-    """
-    attachments = data.get("attachments", {})
-    raw_events = attachments.get("events", {})
-    raw_markets = attachments.get("markets", {})
+    """Parse a content-managed-page payload into our Event models.
 
-    # Build event_id -> markets mapping
-    event_markets = {}
-    for mid, mkt in raw_markets.items():
+    The payload structure is:
+        {
+          "attachments": {
+            "events":  { "<eventId>": { name, openDate, … } },
+            "markets": { "<marketId>": { eventId, marketName, marketType, runners: [...] } }
+          }
+        }
+    """
+    attachments = data.get("attachments", {}) or {}
+    raw_events = attachments.get("events", {}) or {}
+    raw_markets = attachments.get("markets", {}) or {}
+
+    # Group markets by eventId so we don't scan all markets per event.
+    event_markets: dict = {}
+    for mkt in raw_markets.values():
         eid = str(mkt.get("eventId", ""))
-        if eid not in event_markets:
-            event_markets[eid] = []
-        event_markets[eid].append(mkt)
+        if eid:
+            event_markets.setdefault(eid, []).append(mkt)
 
-    events = []
+    events: List[Event] = []
     for eid, ev in raw_events.items():
-        ev_name = ev.get("name", "")
-        open_date = ev.get("openDate", "")
+        ev_name = ev.get("name", "") or ""
+        start_time = _parse_start_time(ev.get("openDate", ""))
 
-        # Parse start time
-        start_time = None
-        if open_date:
-            try:
-                if isinstance(open_date, str):
-                    start_time = datetime.fromisoformat(open_date.replace("Z", "+00:00"))
-            except (ValueError, TypeError):
-                pass
-
-        # Skip far-future placeholder events
+        # Drop far-future placeholder events (FD sometimes returns
+        # year-2099 markers for season-long futures we already cover
+        # via name).
         if start_time and start_time.year > 2090:
             continue
 
-        # Parse teams from event name
-        home_team = ""
-        away_team = ""
-        if " @ " in ev_name:
-            parts = ev_name.split(" @ ")
-            away_team = parts[0].strip()
-            home_team = parts[1].strip()
-        elif " v " in ev_name:
-            parts = ev_name.split(" v ")
-            home_team = parts[0].strip()
-            away_team = parts[1].strip()
-        elif " vs " in ev_name:
-            parts = ev_name.split(" vs ")
-            home_team = parts[0].strip()
-            away_team = parts[1].strip()
-        else:
-            home_team = ev_name
-            away_team = ""
+        # Prefer FD's explicit homeTeam / awayTeam fields when present
+        # (game events have them). Fall back to splitting event name.
+        home_team = (ev.get("homeTeam") or "").strip() or ""
+        away_team = (ev.get("awayTeam") or "").strip() or ""
+        if not (home_team or away_team):
+            away_team, home_team = _split_event_name(ev_name)
 
-        # Parse ALL markets for this event (no filtering)
-        markets = []
-        for raw_mkt in event_markets.get(eid, []):
-            mkt_name = raw_mkt.get("marketName", "")
-            mkt_type_raw = raw_mkt.get("marketType", "")
-            
-            # Use enhanced classification
+        markets: List[Market] = []
+        for raw_mkt in event_markets.get(str(eid), []):
+            mkt_name = raw_mkt.get("marketName", "") or ""
+            mkt_type_raw = raw_mkt.get("marketType", "") or ""
             market_type = _classify_market(mkt_type_raw, mkt_name)
 
-            outcomes = []
-            for runner in raw_mkt.get("runners", []):
-                runner_name = runner.get("runnerName", "")
-                odds_data = runner.get("winRunnerOdds", {})
+            outcomes: List[Outcome] = []
+            for runner in raw_mkt.get("runners", []) or []:
+                runner_name = (runner.get("runnerName") or "").strip()
+                odds_data = runner.get("winRunnerOdds", {}) or {}
 
-                # American odds - handle both int and str
-                raw_american = odds_data.get("americanDisplayOdds", {}).get("americanOdds")
+                raw_american = (
+                    odds_data.get("americanDisplayOdds", {}) or {}
+                ).get("americanOdds")
                 american_int = _safe_american_odds(raw_american)
+                if american_int is None:
+                    # Some runners have `runnerStatus = "REMOVED"` and no
+                    # price — skip them.
+                    continue
 
-                # Decimal odds
-                decimal_val = None
-                true_odds = odds_data.get("trueOdds", {}).get("decimalOdds", {})
+                # Decimal odds (true odds, not display).
+                decimal_val: Optional[float] = None
+                true_odds = (odds_data.get("trueOdds") or {}).get("decimalOdds") or {}
                 if true_odds:
                     try:
                         raw_decimal = true_odds.get("decimalOdds", 0)
@@ -217,22 +352,21 @@ def _parse_response(data: dict, sport: str, league: str) -> List[Event]:
                     except (ValueError, TypeError):
                         decimal_val = None
 
-                # Handicap/point - handle both int and float
-                handicap = runner.get("handicap")
-                point_val = None
-                if handicap is not None:
+                # Handicap / line.
+                point_val: Optional[float] = None
+                hcap = runner.get("handicap")
+                if hcap is not None:
                     try:
-                        point_val = float(handicap)
+                        point_val = float(hcap)
                     except (ValueError, TypeError):
                         point_val = None
 
-                if american_int is not None or decimal_val is not None:
-                    outcomes.append(Outcome(
-                        name=runner_name,
-                        price_american=american_int,
-                        price_decimal=decimal_val,
-                        point=point_val,
-                    ))
+                outcomes.append(Outcome(
+                    name=runner_name or "(?)",
+                    price_american=american_int,
+                    price_decimal=decimal_val,
+                    point=point_val,
+                ))
 
             if outcomes:
                 markets.append(Market(
@@ -243,73 +377,134 @@ def _parse_response(data: dict, sport: str, league: str) -> List[Event]:
 
         if markets:
             events.append(Event(
-                event_id=eid,
+                event_id=str(eid),
                 sport=sport,
                 league=league,
-                home_team=home_team,
+                home_team=home_team or ev_name,
                 away_team=away_team,
                 description=ev_name,
                 start_time=start_time,
-                is_live=ev.get("inPlay", False),
+                is_live=bool(ev.get("inPlay", False)),
                 markets=markets,
             ))
 
     return events
 
 
-async def fetch_sport(sport_slug: str, client: Optional[httpx.AsyncClient] = None) -> List[SportsbookSnapshot]:
+# ─── HTTP fetch with retry + tenant fallback ──────────────────────────
+
+async def _fetch_one(client: httpx.AsyncClient, url: str, sport_slug: str) -> Optional[dict]:
+    """Single GET attempt. Returns parsed JSON on 200, None otherwise."""
+    params = {"page": "CUSTOM", "customPageId": sport_slug, "_ak": API_KEY}
+    try:
+        resp = await client.get(url, params=params, timeout=REQUEST_TIMEOUT)
+    except (httpx.TimeoutException, httpx.NetworkError) as exc:
+        logger.warning("FanDuel GET %s sport=%s network error: %s", url, sport_slug, exc)
+        return None
+    except Exception as exc:
+        logger.warning("FanDuel GET %s sport=%s unexpected error: %s", url, sport_slug, exc)
+        return None
+
+    if resp.status_code != 200:
+        logger.warning(
+            "FanDuel %s sport=%s HTTP %d", url, sport_slug, resp.status_code,
+        )
+        return None
+    try:
+        return resp.json()
+    except Exception as exc:
+        logger.warning("FanDuel %s sport=%s JSON decode error: %s", url, sport_slug, exc)
+        return None
+
+
+async def _fetch_with_fallback(
+    client: httpx.AsyncClient, sport_slug: str,
+) -> Optional[dict]:
+    """Try each tenant in order with limited retries per tenant.
+
+    Returns the first non-empty payload; None if all tenants exhausted.
     """
-    Fetch odds for a FanDuel sport page.
-    Captures all available markets with enhanced classification.
+    last_error_payload: Optional[dict] = None
+    for tenant_url in TENANTS:
+        for attempt in range(MAX_ATTEMPTS_PER_TENANT):
+            data = await _fetch_one(client, tenant_url, sport_slug)
+            if data is not None:
+                # Treat the 'error: true' response shape as a soft failure.
+                if isinstance(data, dict) and data.get("error") is True:
+                    last_error_payload = data
+                    break  # don't retry this tenant; move on
+                return data
+            # Backoff before retry on the same tenant.
+            if attempt < MAX_ATTEMPTS_PER_TENANT - 1:
+                jitter = random.uniform(0.1, 0.3)
+                await asyncio.sleep(0.5 + jitter)
+        # Move to next tenant.
+        logger.info(
+            "FanDuel tenant %s exhausted for sport=%s; trying next tenant",
+            tenant_url, sport_slug,
+        )
+    if last_error_payload is not None:
+        logger.warning("FanDuel: all tenants returned error for sport=%s", sport_slug)
+    return None
+
+
+async def fetch_sport(
+    sport_slug: str, client: Optional[httpx.AsyncClient] = None,
+) -> List[SportsbookSnapshot]:
+    """Fetch odds for one FanDuel sport page.
+
+    Routes through the US proxy if configured (US_PROXY_URL env). Falls
+    back across IL → NJ → PA tenants on per-tenant failure.
     """
     close_client = False
     if client is None:
         from ._proxy import get_client_kwargs
-        client = httpx.AsyncClient(headers=HEADERS, timeout=30.0, **get_client_kwargs("US"))
+        client = httpx.AsyncClient(
+            headers=HEADERS, timeout=REQUEST_TIMEOUT, **get_client_kwargs("US"),
+        )
         close_client = True
 
-    snapshots = []
     try:
-        sport_info = SPORT_MAP.get(sport_slug, {"sport": sport_slug.upper(), "league": sport_slug.upper()})
-        params = {
-            "page": "CUSTOM",
-            "customPageId": sport_slug,
-            "_ak": API_KEY,
-        }
-        resp = await client.get(BASE_URL, params=params)
-        resp.raise_for_status()
-        data = resp.json()
+        sport_info = SPORT_MAP.get(sport_slug, {
+            "sport": sport_slug.upper(), "league": sport_slug.upper(),
+        })
+        data = await _fetch_with_fallback(client, sport_slug)
+        if not data:
+            logger.error("FanDuel: all tenants failed for sport=%s", sport_slug)
+            return []
 
         events = _parse_response(data, sport_info["sport"], sport_info["league"])
-        now = datetime.now(timezone.utc)
+        if not events:
+            return []
 
-        if events:
-            snapshots.append(SportsbookSnapshot(
-                sportsbook=SPORTSBOOK_NAME,
-                sport=sport_info["sport"],
-                league=sport_info["league"],
-                fetched_at=now,
-                events=events,
-            ))
-    except Exception as e:
-        print(f"[FanDuel] Error fetching {sport_slug}: {e}")
+        return [SportsbookSnapshot(
+            sportsbook=SPORTSBOOK_NAME,
+            sport=sport_info["sport"],
+            league=sport_info["league"],
+            fetched_at=datetime.now(timezone.utc),
+            events=events,
+        )]
     finally:
         if close_client:
             await client.aclose()
 
-    return snapshots
-
 
 async def fetch_all() -> List[SportsbookSnapshot]:
-    """Fetch odds for all supported sports from FanDuel."""
-    all_snapshots = []
+    """Fetch every supported FanDuel sport in sequence."""
     from ._proxy import get_client_kwargs
-    async with httpx.AsyncClient(headers=HEADERS, timeout=30.0, **get_client_kwargs("US")) as client:
-        for sport_slug in SPORT_MAP.keys():
-            snapshots = await fetch_sport(sport_slug, client)
-            all_snapshots.extend(snapshots)
-    return all_snapshots
+    out: List[SportsbookSnapshot] = []
+    async with httpx.AsyncClient(
+        headers=HEADERS, timeout=REQUEST_TIMEOUT, **get_client_kwargs("US"),
+    ) as client:
+        for slug in SPORT_MAP:
+            try:
+                out.extend(await fetch_sport(slug, client))
+            except Exception as exc:
+                logger.exception("FanDuel fetch_all sport=%s crashed: %s", slug, exc)
+    return out
 
+
+# ─── Backwards-compatible per-sport convenience wrappers ──────────────
 
 async def fetch_nfl(client: Optional[httpx.AsyncClient] = None) -> List[SportsbookSnapshot]:
     return await fetch_sport("nfl", client)
@@ -325,3 +520,15 @@ async def fetch_mlb(client: Optional[httpx.AsyncClient] = None) -> List[Sportsbo
 
 async def fetch_nhl(client: Optional[httpx.AsyncClient] = None) -> List[SportsbookSnapshot]:
     return await fetch_sport("nhl", client)
+
+
+async def fetch_ncaaf(client: Optional[httpx.AsyncClient] = None) -> List[SportsbookSnapshot]:
+    return await fetch_sport("ncaaf", client)
+
+
+async def fetch_ncaab(client: Optional[httpx.AsyncClient] = None) -> List[SportsbookSnapshot]:
+    return await fetch_sport("ncaab", client)
+
+
+async def fetch_wnba(client: Optional[httpx.AsyncClient] = None) -> List[SportsbookSnapshot]:
+    return await fetch_sport("wnba", client)
