@@ -28,9 +28,28 @@ import logging
 import os
 import re
 import time
+from pathlib import Path
 from typing import Dict, Optional
 
 logger = logging.getLogger("dk_session")
+
+# Comprehensive puppeteer-extra-stealth-equivalent evasion suite.
+# Patches all 17 canonical detection vectors (chrome.app/csi/loadTimes/runtime,
+# fake plugins+mimeTypes, languages, vendor, hardwareConcurrency, deviceMemory,
+# permissions, WebGL vendor/renderer, iframe.contentWindow proxy, UA
+# HeadlessChrome strip, outerWidth/Height, Function.prototype.toString masking).
+# Loaded once at module import so we don't re-read the file on every prime.
+try:
+    _STEALTH_JS = (Path(__file__).parent / "_dk_stealth.js").read_text()
+    logger.info("dk-session: loaded stealth JS (%d bytes)", len(_STEALTH_JS))
+except Exception as e:  # pragma: no cover
+    logger.warning("dk-session: failed to load _dk_stealth.js (%s); using minimal fallback", e)
+    _STEALTH_JS = (
+        "Object.defineProperty(navigator,'webdriver',{get:()=>undefined});"
+        "Object.defineProperty(navigator,'plugins',{get:()=>[1,2,3,4,5]});"
+        "Object.defineProperty(navigator,'languages',{get:()=>['en-US','en']});"
+        "window.chrome={runtime:{}};"
+    )
 
 UA = (
     "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
@@ -140,12 +159,11 @@ class DKSession:
                 locale="en-US",
             )
             page = await ctx.new_page()
-            await page.add_init_script(
-                "Object.defineProperty(navigator,'webdriver',{get:()=>undefined});"
-                "Object.defineProperty(navigator,'plugins',{get:()=>[1,2,3,4,5]});"
-                "Object.defineProperty(navigator,'languages',{get:()=>['en-US','en']});"
-                "window.chrome={runtime:{}};"
-            )
+            # Apply full puppeteer-extra-stealth-equivalent evasion suite
+            # before any DK page script runs. This patches navigator.webdriver,
+            # plugins, languages, vendor, WebGL fingerprint, chrome.* objects,
+            # iframe.contentWindow, and UA HeadlessChrome strip.
+            await page.add_init_script(_STEALTH_JS)
             await page.goto(PRIME_URL, wait_until="domcontentloaded", timeout=45000)
             # Give Akamai's JS challenge time to run and set _abck cookie
             await page.wait_for_timeout(7000)
