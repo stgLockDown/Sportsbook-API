@@ -180,14 +180,17 @@ async def _fetch_all_events(client: httpx.AsyncClient, event_type: str = "premat
     """Fetch all events from BetRivers (no sport filter - it's unreliable)."""
     all_items = []
     page = 1
-    max_pages = 10
+    # BetRivers caps pageSize at 20 (validation error otherwise), so we need
+    # more pages to cover the same event volume. 25 pages × 20 = 500 events,
+    # matching the previous effective ceiling.
+    max_pages = 25
 
     while page <= max_pages:
         params = {
             "cageCode": CAGE_CODE,
             "type": event_type,
             "page": str(page),
-            "pageSize": "50",
+            "pageSize": "20",
         }
         try:
             resp = await client.get(BASE_URL, params=params)
