@@ -2,16 +2,34 @@
 ActionNetwork Scraper — Meta-source providing odds from multiple major US sportsbooks.
 
 ActionNetwork's scoreboard API returns odds from:
-  - DraftKings (book_id 68)
+  - DraftKings (book_id 68)        [direct scraper preferred — see scrapers/draftkings.py]
   - FanDuel (book_id 69)
-  - BetRivers (book_id 71)
+  - BetRivers (book_id 71)         [direct scraper preferred — see scrapers/betrivers.py]
   - BetMGM (book_id 75)
-  - bet365 (book_id 79)
-  - Caesars (book_id 123)
+  - bet365 (book_id 79)            [direct scraper planned]
+  - Caesars (book_id 123)          [STAYS HERE — see ADR-0001]
   - Consensus (book_id 15)
   - Opening Lines (book_id 30)
-  
+
 Sports: NBA, NHL, MLB, NFL, NCAAB, NCAAF, Soccer, MLS, EPL
+
+──────────────────────────────────────────────────────────────────────────────
+Caesars note (do not re-attempt direct scraping without reading docs/adr/0001):
+
+Caesars's real API (api.americanwagering.com) is fronted by AWS WAF Bot Control
+which defeats our standard "Playwright-prime → curl_cffi-replay" pattern at two
+independent layers simultaneously:
+
+  1. CloudFront IP-rep blocks our Decodo residential ranges entirely (403 before
+     the request reaches the API).
+  2. The aws-waf-token is single-use and signature-bound to per-request client
+     telemetry — cookie/header replay is rejected even from a real Chrome session
+     on a clean IP. Only public allowlist endpoints (/sb/features,
+     /configs/sportsbook/{state}/splash) return 200; all odds-bearing XHRs 403.
+
+Recon performed 2024 — see docs/adr/0001-caesars-via-actionnetwork.md for full
+findings, options considered, and revisit triggers.
+──────────────────────────────────────────────────────────────────────────────
 """
 
 import httpx
@@ -29,7 +47,7 @@ BOOK_MAP: Dict[int, str] = {
     71: "betrivers_an",
     75: "betmgm",
     79: "bet365",
-    123: "caesars",
+    123: "caesars",  # served via aggregator — AWS WAF Bot Control defeats direct scraping (see ADR-0001)
     283: "betmgm_mi",
     347: "betmgm_va",
     972: "betrivers_ny",
