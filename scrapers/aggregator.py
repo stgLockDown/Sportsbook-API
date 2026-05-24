@@ -543,6 +543,234 @@ SPORT_SLUGS = {
     },
 }
 
+# ─── Per-Sport League Filter ────────────────────────────────────────────────
+# Many scrapers (kambi.py, betrivers, espn, smarkets, onexbet) hit
+# sport-wide endpoints (e.g. /listView/ice_hockey/all) that return ALL
+# leagues globally. We then bucket those into /events/{sport}, polluting
+# NHL with RHL/AHL/IIHF, NBA with WNBA/NBL, NFL with NCAAF/CFL, etc.
+#
+# This filter runs AFTER fetch but BEFORE aggregate_events, dropping any
+# event whose league string doesn't word-boundary-match the target sport.
+# Mirrors the pattern from scrapers/bet365.py SPORT_LEAGUE_FILTER (PR #12).
+#
+# Key invariants:
+#   • Word-boundary check so "nba" doesn't match "wnba" / "nbl"
+#   • Generic-fallback whitelist: an event with league == sport-display-name
+#     ("Hockey", "Basketball", "Football", "Baseball") may pass IF AND ONLY IF
+#     no negative team-name marker is found in home/away (avoids mid-tier
+#     leakage from books that emit a generic sport label and a foreign team).
+#   • Negative markers help reject obvious WNBA / non-US leakage when the
+#     league field is empty or generic.
+#
+# Each entry:
+#   "sport_key": {
+#       "needles":   [str, ...]   — case-insensitive substrings; word-boundary checked
+#       "rejects":   [str, ...]   — substrings that veto a match
+#       "neg_team":  [str, ...]   — team-name markers that veto when league is generic
+#       "generic":   [str, ...]   — sport-display labels that fall through to neg_team
+#   }
+SPORT_LEAGUE_FILTERS: Dict[str, Dict[str, List[str]]] = {
+    "nba": {
+        "needles":  ["nba", "basketball_nba"],
+        "rejects":  ["wnba", "nbl", "summer league", "g league", "g-league"],
+        "neg_team": [
+            "sparks", "aces", "mercury", "dream", "fever", "liberty",
+            "lynx", "mystics", "sun", "storm", "wings", "valkyries",
+            "tigers", "eagles", "bulldogs",  # NCAA-y
+        ],
+        "generic":  ["basketball"],
+    },
+    "wnba": {
+        "needles":  ["wnba", "basketball_wnba"],
+        "rejects":  [],
+        "neg_team": [],
+        "generic":  ["basketball"],
+    },
+    "ncaab": {
+        "needles":  ["ncaab", "ncaa", "college basketball"],
+        "rejects":  ["wnba", "nba", "nbl", "australia"],
+        "neg_team": [],
+        "generic":  ["basketball"],
+    },
+    "nfl": {
+        "needles":  ["nfl", "americanfootball_nfl"],
+        "rejects":  [
+            "ncaaf", "ncaa", "cfl", "college football", "xfl", "ufl",
+            "futures", "to make the playoffs", "to miss the playoffs",
+            "regular season wins", "divisions", "player awards",
+        ],
+        "neg_team": [],
+        "generic":  ["football"],
+    },
+    "ncaaf": {
+        "needles":  ["ncaaf", "ncaa", "college football"],
+        "rejects":  ["nfl", "cfl", "xfl", "ufl"],
+        "neg_team": [],
+        "generic":  ["football"],
+    },
+    "mlb": {
+        "needles":  ["mlb", "baseball_mlb"],
+        "rejects":  [
+            "npb", "kbo", "minor league", "milb",
+            "futures", "divisions", "player awards", "world series futures",
+        ],
+        "neg_team": [],
+        "generic":  ["baseball"],
+    },
+    "nhl": {
+        "needles":  ["nhl", "icehockey_nhl", "ice_hockey_nhl"],
+        "rejects":  [
+            "ahl", "rhl", "khl", "iihf", "world championship",
+            "aihl", "uahl", "magnitka", "dream league",
+        ],
+        "neg_team": [],
+        "generic":  ["hockey", "ice hockey"],
+    },
+    "mma": {
+        "needles":  ["mma", "ufc", "bellator", "pfl"],
+        "rejects":  [],
+        "neg_team": [],
+        "generic":  ["mma"],
+    },
+    "boxing": {
+        "needles":  ["boxing"],
+        "rejects":  [],
+        "neg_team": [],
+        "generic":  ["boxing"],
+    },
+    "soccer": {
+        # Soccer is intentionally permissive — every league is real.
+        "needles":  ["soccer", "football"],   # "football" matches Soccer paths in EU books
+        "rejects":  ["american football", "ncaaf", "nfl", "cfl", "afl"],
+        "neg_team": [],
+        "generic":  ["soccer", "football"],
+    },
+    "tennis": {
+        "needles":  ["tennis", "atp", "wta", "itf", "grand slam"],
+        "rejects":  [],
+        "neg_team": [],
+        "generic":  ["tennis"],
+    },
+}
+
+
+def _word_boundary_match(haystack: str, needle: str) -> bool:
+    """True iff `needle` appears in `haystack` (case-insensitive) with
+    non-alphanumeric neighbors on both sides. So "nba" won't match
+    "wnba" but will match "nba", "nba.", "nba_", "(NBA)", etc."""
+    if not haystack or not needle:
+        return False
+    h = haystack.lower()
+    n = needle.lower()
+    start = 0
+    while True:
+        idx = h.find(n, start)
+        if idx < 0:
+            return False
+        left_ok  = (idx == 0) or (not h[idx - 1].isalnum())
+        end = idx + len(n)
+        right_ok = (end == len(h)) or (not h[end].isalnum())
+        if left_ok and right_ok:
+            return True
+        start = idx + 1
+
+
+def _league_matches_sport(league: str, sport_key: str,
+                          home: str = "", away: str = "",
+                          description: str = "") -> bool:
+    """Return True if an event with the given league string (and optional
+    team/description context) is plausibly a member of `sport_key`.
+
+    Default-allow if `sport_key` has no filter entry — preserves existing
+    behaviour for less-trafficked sports.
+    """
+    spec = SPORT_LEAGUE_FILTERS.get(sport_key.lower())
+    if not spec:
+        return True
+
+    L = (league or "").strip()
+    L_lower = L.lower()
+
+    # 1) Hard rejects always win.
+    for r in spec.get("rejects", []):
+        if _word_boundary_match(L_lower, r):
+            return False
+
+    # 2) Empty league → fall through to generic-label rules below.
+    is_empty   = not L_lower
+    is_generic = any(L_lower == g for g in spec.get("generic", []))
+
+    # 3) Direct positive needle match: accept.
+    for n in spec.get("needles", []):
+        if _word_boundary_match(L_lower, n):
+            return True
+
+    # 4) Empty or generic-only league: accept ONLY if no negative team
+    # marker is present in home/away/description. Without that check
+    # we'd let WNBA games leak into NBA whenever the source emits the
+    # generic "Basketball" label.
+    if is_empty or is_generic:
+        ctx = f"{home} {away} {description}".lower()
+        for neg in spec.get("neg_team", []):
+            if _word_boundary_match(ctx, neg):
+                return False
+        # Empty league with no rejects + no negatives: tentatively accept.
+        # This preserves coverage for books that genuinely don't tag league.
+        return True
+
+    # 5) Specific non-matching league: reject.
+    return False
+
+
+def _filter_snapshots_by_sport(snapshots: List[SportsbookSnapshot],
+                               sport_key: str) -> List[SportsbookSnapshot]:
+    """Drop events that don't pass _league_matches_sport for the target
+    sport_key. Returns a NEW list of snapshots; original list untouched.
+    Logs a one-line summary of how many events were dropped per book."""
+    if sport_key.lower() not in SPORT_LEAGUE_FILTERS:
+        return snapshots
+
+    out: List[SportsbookSnapshot] = []
+    total_kept = 0
+    total_dropped = 0
+    drop_by_book: Dict[str, int] = {}
+
+    for snap in snapshots:
+        kept_events = []
+        for ev in snap.events:
+            if _league_matches_sport(
+                getattr(ev, "league", "") or "",
+                sport_key,
+                getattr(ev, "home_team", "") or "",
+                getattr(ev, "away_team", "") or "",
+                getattr(ev, "description", "") or "",
+            ):
+                kept_events.append(ev)
+            else:
+                total_dropped += 1
+                drop_by_book[snap.sportsbook] = drop_by_book.get(snap.sportsbook, 0) + 1
+
+        total_kept += len(kept_events)
+        # Build a new snapshot with filtered events. Use the same
+        # constructor signature as SportsbookSnapshot.
+        out.append(SportsbookSnapshot(
+            sportsbook=snap.sportsbook,
+            sport=snap.sport,
+            league=snap.league,
+            fetched_at=snap.fetched_at,
+            events=kept_events,
+        ))
+
+    if total_dropped > 0:
+        # Truncate noisy book lists to top 5 in the log line.
+        top = sorted(drop_by_book.items(), key=lambda kv: -kv[1])[:5]
+        top_str = ", ".join(f"{b}={n}" for b, n in top)
+        print(f"[league_filter] {sport_key}: kept {total_kept}, "
+              f"dropped {total_dropped} (top: {top_str})")
+
+    return out
+
+
 ALL_SPORTSBOOKS = [
     # Direct scrapers (8 original)
     "Bovada", "FanDuel", "BetRivers", "Pinnacle",
@@ -879,6 +1107,14 @@ async def fetch_sport_all_books(sport_key: str) -> List[SportsbookSnapshot]:
         elif isinstance(result, Exception):
             print(f"[Aggregator] Task error: {result}")
 
+    # ── Per-sport league filter ──────────────────────────────────────
+    # Strips events whose league doesn't word-boundary-match the
+    # target sport. Necessary because several scrapers (kambi.py,
+    # betrivers, espn, smarkets, onexbet) hit sport-wide endpoints
+    # that return all leagues globally (NHL → also gets RHL/AHL/IIHF;
+    # NFL → also gets NCAAF/CFL; NBA → also gets WNBA/NBL/Liga ACB).
+    all_snapshots = _filter_snapshots_by_sport(all_snapshots, sport_key)
+
     cache.set(f"sport:{sport_key}", all_snapshots)
     return all_snapshots
 
@@ -1203,6 +1439,10 @@ async def fetch_single_book(sport_key: str, sportsbook: str) -> List[SportsbookS
 
     except Exception as e:
         print(f"[Aggregator] Error from {sportsbook}: {e}")
+
+    # Apply per-sport league filter to single-book results too — a sharp
+    # bettor querying /odds/nhl/kambi shouldn't get RHL games either.
+    snapshots = _filter_snapshots_by_sport(snapshots, sport_key)
 
     cache.set(cache_key, snapshots)
     return snapshots
