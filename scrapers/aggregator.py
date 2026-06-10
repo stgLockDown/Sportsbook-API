@@ -1746,6 +1746,42 @@ def _canonicalize_moneyline_event(ev: Event) -> Event:
     )
 
 
+def _prefer_fuller_name(current: str, candidate: str) -> str:
+    """Return the more complete team name of two that refer to the same team.
+    Prefers the one with more words / characters (e.g. 'San Diego Padres'
+    over 'SD Padres'). Falls back to `current` if they don't match."""
+    if not candidate:
+        return current
+    if not current:
+        return candidate
+    if not _teams_match(current, candidate):
+        return current
+    cw, kw = len(current.split()), len(candidate.split())
+    if kw > cw:
+        return candidate
+    if kw == cw and len(candidate) > len(current):
+        return candidate
+    return current
+
+
+def canonical_team_for(name: str, home_team: str, away_team: str) -> Optional[str]:
+    """Public helper: map an outcome label to the aggregated event's canonical
+    home/away team name. Returns home_team, away_team, or None."""
+    raw = (name or "").strip()
+    if not raw:
+        return None
+    if _teams_match(raw, home_team):
+        return home_team
+    if _teams_match(raw, away_team):
+        return away_team
+    low = raw.lower()
+    if low in _GENERIC_HOME:
+        return home_team
+    if low in _GENERIC_AWAY:
+        return away_team
+    return None
+
+
 def aggregate_events(snapshots: List[SportsbookSnapshot]) -> List[AggregatedEvent]:
     """Match events across sportsbooks and aggregate.
     Uses hash bucketing for O(n) performance instead of O(n²)."""
@@ -1775,6 +1811,12 @@ def aggregate_events(snapshots: List[SportsbookSnapshot]) -> List[AggregatedEven
                     matched_agg.sportsbook_odds[book] = ev
                     if ev.is_live:
                         matched_agg.is_live = True
+                # Upgrade the bucket's canonical team names to the most complete
+                # variant seen (e.g. prefer "San Diego Padres" over "SD Padres").
+                matched_agg.home_team = _prefer_fuller_name(
+                    matched_agg.home_team, ev.home_team)
+                matched_agg.away_team = _prefer_fuller_name(
+                    matched_agg.away_team, ev.away_team)
                 # Ensure all keys point to same agg
                 for key in keys:
                     if key not in buckets:
@@ -1818,6 +1860,14 @@ def find_best_odds(aggregated: List[AggregatedEvent]) -> List[BestOdds]:
                     best_markets[mkey] = {}
                 for outcome in market.outcomes:
                     okey = outcome.name
+                    # Collapse to the aggregated event's canonical team name so
+                    # best-price comparison aligns across differently-labeled
+                    # books (e.g. "SD Padres" and "San Diego Padres").
+                    if mkey == MarketType.MONEYLINE.value:
+                        canon = canonical_team_for(
+                            outcome.name, agg.home_team, agg.away_team)
+                        if canon:
+                            okey = canon
                     if outcome.price_american is not None:
                         current = best_markets[mkey].get(okey)
                         if current is None or outcome.price_american > current[0]:
