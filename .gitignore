@@ -46,3 +46,6 @@ add_comeon_slugs.py
 
 # Documentation (kept separately)
 todo.md
+# Local diagnostics (never commit)
+_diag/
+FIX_TODO.md

@@ -1,5 +1,5 @@
 """
-Sportsbook Odds Aggregation API v11.0.0 — Global Expansion Edition
+Sportsbook Odds Aggregation API v11.1.0 — Global Expansion Edition
 Directly scrapes public APIs from 58+ sportsbooks across US, EU, UK, AU, Balkans, Asia, LatAm, and exchanges.
 No API keys required. No third-party middlemen.
 
@@ -116,7 +116,7 @@ app = FastAPI(
         "1xBet, BetWinner, Melbet, 1xBit, Linebet, MegaPari, 22Bet (Direct), "
         "Consensus, Opening Lines. 24 sports. No API keys required."
     ),
-    version="11.0.0",
+    version="11.1.0",
     lifespan=lifespan,
 )
 
@@ -135,7 +135,7 @@ app.add_middleware(
 async def root():
     return {
         "name": "Sportsbook Odds Aggregation API — Ultimate Edition",
-        "version": "10.0.0",
+        "version": "11.1.0",
         "sportsbooks": ALL_SPORTSBOOKS,
         "sportsbook_count": len(ALL_SPORTSBOOKS),
         "sport_count": len(get_available_sports()),

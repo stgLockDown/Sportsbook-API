@@ -1569,6 +1569,183 @@ def _event_bucket_keys(ev: Event) -> List[str]:
     return keys
 
 
+# ─── Moneyline Outcome Canonicalization ──────────────────────────────────
+# Different books label moneyline outcomes inconsistently (full names,
+# abbreviations like "SD Padres", generic "Home"/"Away", "1"/"2"/"X",
+# empty strings, or phantom "Draw"/"Tie" in 2-way sports). This breaks
+# cross-book alignment in find_best_odds / all_odds, making correct prices
+# look mismatched. We canonicalize every moneyline outcome to the event's
+# own home_team / away_team so all books line up on the same two keys.
+
+# Sports that are inherently 2-way (no draw) — phantom Draw/Tie must be dropped.
+_TWO_WAY_LEAGUES = {
+    "mlb", "nba", "wnba", "ncaab", "nfl", "ncaaf", "nhl",
+    "baseball", "basketball", "americanfootball", "ice hockey", "icehockey",
+    "tennis", "mma", "ufc", "boxing",
+}
+
+# Generic / placeholder outcome labels that map by POSITION (first=home, second=away).
+_GENERIC_HOME = {"home", "1", "host", ""}
+_GENERIC_AWAY = {"away", "2", "visitor", "guest"}
+_DRAW_LABELS = {"draw", "tie", "x", "the draw"}
+
+
+def _is_two_way(sport: str, league: str) -> bool:
+    s = (sport or "").lower()
+    l = (league or "").lower()
+    blob = f"{s} {l}"
+    return any(k in blob for k in _TWO_WAY_LEAGUES)
+
+
+def _looks_like_submarket(name: str) -> bool:
+    """Detect half/period/inning sub-markets that leak into moneyline
+    (e.g. 'Reds - 1H', 'Padres - 1I', '... 1st Half')."""
+    n = (name or "").lower()
+    markers = (" - 1h", " - 2h", " - 1i", " - 2i", " - 1p", " - 2p", " - 3p",
+               "1st half", "2nd half", "1st inning", "first half", "first inning",
+               " 1h", " 2h", " - q1", " - q2", " - q3", " - q4")
+    return any(m in n for m in markers)
+
+
+def _canonical_outcome_name(raw_name: str, home_team: str, away_team: str,
+                            position: int) -> Optional[str]:
+    """Map a raw book outcome label to the event's canonical home/away team.
+    Returns home_team, away_team, or None (drop this outcome).
+    `position` is the index of the outcome within its market (0-based)."""
+    raw = (raw_name or "").strip()
+    low = raw.lower()
+
+    # Drop phantom draw/tie outcomes outright (handled by caller for 2-way).
+    if low in _DRAW_LABELS:
+        return None
+
+    # Exact / fuzzy team-name match wins first.
+    if raw and _teams_match(raw, home_team):
+        return home_team
+    if raw and _teams_match(raw, away_team):
+        return away_team
+
+    # Generic positional labels.
+    if low in _GENERIC_HOME:
+        return home_team
+    if low in _GENERIC_AWAY:
+        return away_team
+
+    # Pure position fallback for unknown/empty labels: 2-outcome markets are
+    # conventionally ordered [home, away] in our scrapers.
+    if position == 0:
+        return home_team
+    if position == 1:
+        return away_team
+    return None
+
+
+def _canonicalize_moneyline_event(ev: Event) -> Event:
+    """Return a copy of the event whose MONEYLINE market outcomes are
+    canonicalized to exactly [home_team, away_team] with correct prices.
+    Phantom draws, sub-markets, and null-price outcomes are removed.
+    Non-moneyline markets are passed through untouched."""
+    two_way = _is_two_way(ev.sport, ev.league)
+    new_markets: List[Market] = []
+
+    # Gather ALL moneyline markets for this book-event together. Some books
+    # (notably ESPN) return multiple provider lines; if they disagree on the
+    # favorite (sign of a team's price) the data is unreliable and we drop the
+    # conflicting side rather than let an inverted/stale line win "best price".
+    ml_markets = [m for m in ev.markets if m.market_type == MarketType.MONEYLINE]
+    other_markets = [m for m in ev.markets if m.market_type != MarketType.MONEYLINE]
+    new_markets.extend(other_markets)
+
+    if ml_markets:
+        # team -> list of (price_american, price_decimal, point, raw_name, was_named)
+        per_team: Dict[str, list] = {}
+        draw_outcome = None
+        for mkt in ml_markets:
+            pos = 0
+            for outcome in mkt.outcomes:
+                name = outcome.name or ""
+                if _looks_like_submarket(name):
+                    continue
+                if outcome.price_american is None and outcome.price_decimal is None:
+                    continue
+                low = name.strip().lower()
+                if low in _DRAW_LABELS:
+                    if two_way:
+                        continue
+                    if draw_outcome is None:
+                        draw_outcome = outcome
+                    continue
+                canon = _canonical_outcome_name(name, ev.home_team, ev.away_team, pos)
+                pos += 1
+                if canon is None:
+                    continue
+                was_named = bool(name) and _teams_match(name, canon)
+                per_team.setdefault(canon, []).append(
+                    (outcome.price_american, outcome.price_decimal,
+                     outcome.point, was_named))
+
+        def _resolve(team: str):
+            """Pick a single price for a team from possibly-multiple markets.
+            If named (real team-name) quotes exist, prefer them. If remaining
+            quotes disagree on sign (favorite flip), the book is unreliable for
+            this team -> return None to drop it."""
+            quotes = per_team.get(team, [])
+            if not quotes:
+                return None
+            named = [q for q in quotes if q[3]]
+            pool = named if named else quotes
+            signs = {(q[0] > 0) for q in pool if q[0] is not None}
+            if len(signs) > 1:
+                return None  # conflicting favorite -> unreliable, drop
+            # Prefer the quote with the largest |price| consistency: just take
+            # the median american to smooth minor provider differences.
+            ams = sorted(q[0] for q in pool if q[0] is not None)
+            if not ams:
+                q = pool[0]
+                return Outcome(name=team, price_american=None,
+                               price_decimal=q[1], point=q[2])
+            mid = ams[len(ams) // 2]
+            chosen = next(q for q in pool if q[0] == mid)
+            return Outcome(name=team, price_american=chosen[0],
+                           price_decimal=chosen[1], point=chosen[2])
+
+        canon_outcomes: List[Outcome] = []
+        ho = _resolve(ev.home_team)
+        ao = _resolve(ev.away_team)
+        if ho:
+            canon_outcomes.append(ho)
+        if ao:
+            canon_outcomes.append(ao)
+        if not two_way and draw_outcome is not None and ho and ao:
+            canon_outcomes.append(Outcome(
+                name="Draw",
+                price_american=draw_outcome.price_american,
+                price_decimal=draw_outcome.price_decimal,
+                point=draw_outcome.point,
+            ))
+
+        # Keep only if we recovered BOTH team prices (usable 2-way market).
+        if ho is not None and ao is not None:
+            new_markets.append(Market(
+                market_type=MarketType.MONEYLINE,
+                name="Moneyline",
+                outcomes=canon_outcomes,
+            ))
+        # else: drop this book's moneyline for this event (corrupt/conflicting)
+
+    return Event(
+        event_id=ev.event_id,
+        sport=ev.sport,
+        league=ev.league,
+        home_team=ev.home_team,
+        away_team=ev.away_team,
+        description=ev.description,
+        start_time=ev.start_time,
+        is_live=ev.is_live,
+        markets=new_markets,
+    )
+
+
 def aggregate_events(snapshots: List[SportsbookSnapshot]) -> List[AggregatedEvent]:
     """Match events across sportsbooks and aggregate.
     Uses hash bucketing for O(n) performance instead of O(n²)."""
@@ -1580,6 +1757,9 @@ def aggregate_events(snapshots: List[SportsbookSnapshot]) -> List[AggregatedEven
     for snap in snapshots:
         for ev in snap.events:
             book = snap.sportsbook
+            # Canonicalize moneyline outcome names to this event's home/away
+            # team so all books align on the same two keys with correct prices.
+            ev = _canonicalize_moneyline_event(ev)
             keys = _event_bucket_keys(ev)
 
             # Check if this event matches an existing bucket
