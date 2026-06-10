@@ -32,6 +32,7 @@ from scrapers.aggregator import (
     aggregate_events,
     find_best_odds,
     get_available_sports,
+    canonical_team_for,
     cache,
     ALL_SPORTSBOOKS,
     SPORTSBOOK_INFO,
@@ -327,7 +328,16 @@ async def compare_odds(
             for mkt in event.markets:
                 if mkt.market_type.value == target_market:
                     for outcome in mkt.outcomes:
-                        book_odds[outcome.name] = {
+                        # Re-key the outcome to the aggregated event's canonical
+                        # full team name so every book lines up on the same two
+                        # keys (e.g. "SD Padres" -> "San Diego Padres").
+                        label = outcome.name
+                        if target_market == "moneyline":
+                            canon = canonical_team_for(
+                                outcome.name, agg.home_team, agg.away_team)
+                            if canon:
+                                label = canon
+                        book_odds[label] = {
                             "american": outcome.price_american,
                             "decimal": outcome.price_decimal,
                             "point": outcome.point,
