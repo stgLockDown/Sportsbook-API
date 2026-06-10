@@ -145,10 +145,13 @@ def _parse_game_odds(game: dict, book_id: int) -> List[Market]:
         home_team = teams_by_id[home_team_id].get("full_name", teams_by_id[home_team_id].get("short_name", "Home"))
     if away_team_id and away_team_id in teams_by_id:
         away_team = teams_by_id[away_team_id].get("full_name", teams_by_id[away_team_id].get("short_name", "Away"))
-    # Fallback: first team = away, second = home (ActionNetwork convention)
-    if not home_team and len(teams) >= 2:
-        home_team = teams[0].get("full_name", "Home")
-        away_team = teams[1].get("full_name", "Away")
+    # Fallback: ActionNetwork lists teams as [away, home]. Only used when
+    # home_team_id / away_team_id are missing. (Previously this assigned
+    # teams[0]->home which SWAPPED the sides; ml_home/ml_away are keyed to
+    # the real home/away, so the swap produced inverted moneylines.)
+    if (not home_team or not away_team) and len(teams) >= 2:
+        away_team = teams[0].get("full_name", teams[0].get("short_name", "Away"))
+        home_team = teams[1].get("full_name", teams[1].get("short_name", "Home"))
 
     for odds_entry in book_odds:
         otype = odds_entry.get("type", "game")
@@ -245,10 +248,11 @@ def _parse_game_meta(game: dict):
         home_team = teams_by_id[home_team_id].get("full_name", teams_by_id[home_team_id].get("short_name", "Home"))
     if away_team_id and away_team_id in teams_by_id:
         away_team = teams_by_id[away_team_id].get("full_name", teams_by_id[away_team_id].get("short_name", "Away"))
-    # Fallback: first team = away, second = home
-    if not home_team and len(teams) >= 2:
-        home_team = teams[0].get("full_name", "Home")
-        away_team = teams[1].get("full_name", "Away")
+    # Fallback: ActionNetwork lists teams as [away, home]. Keep consistent
+    # with _parse_game_odds so event meta and odds use the same sides.
+    if (not home_team or not away_team) and len(teams) >= 2:
+        away_team = teams[0].get("full_name", teams[0].get("short_name", "Away"))
+        home_team = teams[1].get("full_name", teams[1].get("short_name", "Home"))
     start_time = game.get("start_time", "")
     status = game.get("status_display", "")
     return home_team, away_team, start_time, status
